@@ -1,3 +1,5 @@
+![Takyon Logo](docs/Takyon_Abaco-logo.jpg)
+
 ## License
   Copyright 2018 Abaco Systems
   Licensed under the Apache License, Version 2.0 (the "License");
