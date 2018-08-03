@@ -1,4 +1,4 @@
-![Takyon Logo](docs/Takyon_Abaco-logo.jpg =369x105)
+![Takyon Logo](docs/Takyon_Abaco-logo.jpg)
 
 ## License
   Copyright 2018 Abaco Systems
