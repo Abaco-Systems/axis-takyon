@@ -118,6 +118,16 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   MmapPath *mmap_path = (MmapPath *)private_path->private;
   XferBuffer *buffer = &mmap_path->send_buffer_list[buffer_index];
 
+  // Verify the number of buffers
+  if (path->attrs.nbufs_AtoB > 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
+    return false;
+  }
+  if (path->attrs.nbufs_BtoA > 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
+    return false;
+  }
+
   // Verify connection is good
   // IMPORTANT: this is not protected in a mutex, but should be fine since the send will not go to sleep waiting in a conditional variable
   if (!mmap_path->connected) {
@@ -193,8 +203,6 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   // Handle completion
   if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
     buffer->send_started = false;
-  //} else if (path->attrs.send_completion_method == TAKYON_NO_NOTIFICATION) {
-  //  buffer->send_started = false;
   } else if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
     // Nothing to do
   }
@@ -202,27 +210,18 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   return true;
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
+static bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
   return privateSendStrided(path, buffer_index, num_blocks, bytes_per_block, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
+static bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
   uint64_t num_blocks = 1;
   uint64_t src_stride = 0;
   uint64_t dest_stride = 0;
   return privateSendStrided(path, buffer_index, num_blocks, bytes, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
+static bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   MmapPath *mmap_path = (MmapPath *)private_path->private;
   XferBuffer *buffer = &mmap_path->send_buffer_list[buffer_index];
@@ -260,13 +259,13 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
         return false;
       }
       // Check timeout
-      if (private_path->recv_start_timeout_ns == TAKYON_NO_WAIT) {
+      if (private_path->recv_complete_timeout_ns == TAKYON_NO_WAIT) {
         *timed_out_ret = 1;
         return true;
-      } else if (private_path->recv_start_timeout_ns >= 0) {
+      } else if (private_path->recv_complete_timeout_ns >= 0) {
         int64_t time2 = clockTimeNanoseconds();
         int64_t diff = time2 - time1;
-        if (diff > private_path->recv_start_timeout_ns) {
+        if (diff > private_path->recv_complete_timeout_ns) {
           *timed_out_ret = 1;
           return true;
         }
@@ -280,7 +279,7 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
     }
     // Block here until send() signals the event (it's initially unsignaled)
     bool timed_out;
-    bool suceeded = waitForSignal(mmap_path->remote_event, private_path->recv_start_timeout_ns, &timed_out, path->attrs.error_message);
+    bool suceeded = waitForSignal(mmap_path->remote_event, private_path->recv_complete_timeout_ns, &timed_out, path->attrs.error_message);
     if (!suceeded) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to wait for data\n");
       if (!unlockMutex(mmap_path->mutex, path->attrs.error_message)) {
@@ -348,17 +347,11 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
   return true;
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
+static bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
   return privateRecv(path, buffer_index, num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret, timed_out_ret);
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
+static bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   uint64_t num_blocks;
   uint64_t stride;
   bool timed_out = false;
@@ -433,10 +426,7 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
   }
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknDestroy(TakyonPath *path) {
+static bool tknDestroy(TakyonPath *path) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   MmapPath *mmap_path = (MmapPath *)private_path->private;
 
@@ -506,13 +496,19 @@ bool tknDestroy(TakyonPath *path) {
   return graceful_disconnect_ok;
 }
 
-#ifdef _WIN32
-static
-#endif
-bool tknCreate(TakyonPath *path) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+static bool tknCreate(TakyonPath *path) {
+  // Verify the number of buffers
+  if (path->attrs.nbufs_AtoB <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
+    return false;
+  }
+  if (path->attrs.nbufs_BtoA <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
+    return false;
+  }
 
-  // Determine the interconnect parameters
+  // Supported formats:
+  //   "Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]"
   int path_id;
   bool found;
   bool ok = argGetInt(path->attrs.interconnect, "-ID", &path_id, &found, path->attrs.error_message);
@@ -534,6 +530,7 @@ bool tknCreate(TakyonPath *path) {
   // Create local socket name used to coordinate connection and disconnection
   char socket_name[MAX_TAKYON_INTERCONNECT_CHARS];
   sprintf(socket_name, "TakyonMMAP_sock_%d", path_id);
+  bool allow_reuse = argGetFlag(path->attrs.interconnect, "-reuse");
 
   // Vebosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_INIT_DETAILS) {
@@ -567,6 +564,7 @@ bool tknCreate(TakyonPath *path) {
   }
 
   // Allocate private handle
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   MmapPath *mmap_path = calloc(1, sizeof(MmapPath));
   if (mmap_path == NULL) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
@@ -642,7 +640,7 @@ bool tknCreate(TakyonPath *path) {
       goto cleanup;
     }
   } else {
-    if (!socketCreateLocalServer(socket_name, &mmap_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
+    if (!socketCreateLocalServer(socket_name, allow_reuse, &mmap_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create local server socket\n");
       goto cleanup;
     }
@@ -879,7 +877,6 @@ bool tknCreate(TakyonPath *path) {
   return false;
 }
 
-#ifdef _WIN32
 void setMmapFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
   private_path->tknSend = tknSend;
@@ -889,4 +886,3 @@ void setMmapFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknRecvStrided = tknRecvStrided;
   private_path->tknDestroy = tknDestroy;
 }
-#endif

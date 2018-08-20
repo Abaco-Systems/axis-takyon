@@ -35,6 +35,25 @@
 #endif
 #include "takyon_private.h"
 
+static bool setSocketTimeout(int socket_fd, int timeout_name, int64_t timeout_ns, char *error_message) {
+  struct timeval timeout;
+  if (timeout_ns < 0) {
+    timeout.tv_sec = INT_MAX;
+    timeout.tv_usec = 0;
+  } else if (timeout_ns == TAKYON_NO_WAIT) {
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 1;
+  } else {
+    timeout.tv_sec = timeout_ns / 1000000000LL;
+    timeout.tv_usec = (timeout_ns % 1000000000LL) / 1000;
+  }
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to set the timeout = %lld\n", (long long)timeout_ns);
+    return false;
+  }
+  return true;
+}
+
 static size_t socket_write_private(int socket, void *addr, size_t bytes_to_write) {
   // The send() or write() can crash due to a SIGPIPE, so need a way to mask that signal while transferring, and instead return a graceful failure code.
 #ifdef __APPLE__
@@ -57,31 +76,17 @@ static size_t socket_write_private(int socket, void *addr, size_t bytes_to_write
   return bytes_written;
 }
 
-static bool socket_send_event_driven(int socket, void *addr, size_t total_bytes_to_write, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+static bool socket_send_event_driven(int socket_fd, void *addr, size_t total_bytes_to_write, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Set the timeout on the socket
-  struct timeval timeout;
-  if (timeout_ns < 0) {
-    timeout.tv_sec = INT_MAX;
-    timeout.tv_usec = 0;
-  } else if (timeout_ns == TAKYON_NO_WAIT) {
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1;
-  } else {
-    timeout.tv_sec = timeout_ns / 1000000000LL;
-    timeout.tv_usec = (timeout_ns % 1000000000LL) / 1000;
-  }
-  if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) {
-    TAKYON_RECORD_ERROR(error_message, "Failed to set the timeout = %lld\n", (long long)timeout_ns);
-    return false;
-  }
+  if (!setSocketTimeout(socket_fd, SO_SNDTIMEO, timeout_ns, error_message)) return false;
 
   // Write the data
   size_t total_bytes_sent = 0;
   while (total_bytes_sent < total_bytes_to_write) {
     size_t bytes_to_write = total_bytes_to_write - total_bytes_sent;
-    size_t bytes_written = socket_write_private(socket, addr, bytes_to_write);
+    size_t bytes_written = socket_write_private(socket_fd, addr, bytes_to_write);
     if (bytes_written == bytes_to_write) {
       // Done
       break;
@@ -145,7 +150,7 @@ static bool socket_send_polling(int socket, void *addr, size_t total_bytes_to_wr
                 *timed_out_ret = true;
                 return true;
               } else {
-                // Can't report the timed
+                // Can't report the time out
                 TAKYON_RECORD_ERROR(error_message, "Timed out starting the transfer\n");
                 return false;
               }
@@ -186,21 +191,7 @@ static bool socket_recv_event_driven(int socket_fd, void *data_ptr, size_t bytes
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Set the timeout on the socket
-  struct timeval timeout;
-  if (timeout_ns < 0) {
-    timeout.tv_sec = INT_MAX;
-    timeout.tv_usec = 0;
-  } else if (timeout_ns == TAKYON_NO_WAIT) {
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1;
-  } else {
-    timeout.tv_sec = timeout_ns / 1000000000LL;
-    timeout.tv_usec = (timeout_ns % 1000000000LL) / 1000;
-  }
-  if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
-    TAKYON_RECORD_ERROR(error_message, "Failed to set the timeout = %lld\n", (long long)timeout_ns);
-    return false;
-  }
+  if (!setSocketTimeout(socket_fd, SO_RCVTIMEO, timeout_ns, error_message)) return false;
 
   char *data = data_ptr;
   size_t total_bytes_read = 0;
@@ -496,7 +487,7 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, int *socke
   }
 }
 
-bool socketCreateLocalServer(const char *socket_name, int *socket_fd_ret, int64_t timeout_ns, char *error_message) {
+bool socketCreateLocalServer(const char *socket_name, bool allow_reuse, int *socket_fd_ret, int64_t timeout_ns, char *error_message) {
   int listening_fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (listening_fd == -1) {
     TAKYON_RECORD_ERROR(error_message, "Could not create unix socket. errno=%d\n", errno);
@@ -513,7 +504,7 @@ bool socketCreateLocalServer(const char *socket_name, int *socket_fd_ret, int64_
 
   unlink(socket_name); // Unlink the socket name will remove the file, since it's no longer needed at this point.
 
-  {
+  if (allow_reuse) {
     // This will allow a previously closed socket, that is still in the TIME_WAIT stage, to be used.
     // This may accur if the application did not exit gracefully on a previous run.
     int allow = 1;
@@ -525,7 +516,11 @@ bool socketCreateLocalServer(const char *socket_name, int *socket_fd_ret, int64_
   }
 
   if (bind(listening_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-    TAKYON_RECORD_ERROR(error_message, "Could not bind unix socket. errno=%d\n", errno);
+    if (errno == EADDRINUSE) {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind unix socket. The address is already in use or in a time wait state. May need to use the option '-reuse'\n");
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind unix socket. errno=%d\n", errno);
+    }
     close(listening_fd);
     return false;
   }
@@ -561,7 +556,7 @@ bool socketCreateLocalServer(const char *socket_name, int *socket_fd_ret, int64_
   return true;
 }
 
-bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, int *socket_fd_ret, int64_t timeout_ns, char *error_message) {
+bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow_reuse, int *socket_fd_ret, int64_t timeout_ns, char *error_message) {
   int listening_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (listening_fd == -1) {
     TAKYON_RECORD_ERROR(error_message, "Could not create TCP socket. errno=%d\n", errno);
@@ -584,7 +579,7 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, int *socke
     server_addr.sin_addr.s_addr = inet_addr(ip_addr);
   }
 
-  {
+  if (allow_reuse) {
     // This will allow a previously closed socket, that is still in the TIME_WAIT stage, to be used.
     // This may accur if the application did not exit gracefully on a previous run.
     int allow = 1;
@@ -596,7 +591,11 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, int *socke
   }
 
   if (bind(listening_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-    TAKYON_RECORD_ERROR(error_message, "Could not bind TCP server socket. Make sure the IP addr (%s) is defined for this machine. errno=%d\n", ip_addr, errno);
+    if (errno == EADDRINUSE) {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind TCP server socket. The address is already in use or in a time wait state. May need to use the option '-reuse'\n");
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind TCP server socket. Make sure the IP addr (%s) is defined for this machine. errno=%d\n", ip_addr, errno);
+    }
     close(listening_fd);
     return false;
   }
@@ -869,5 +868,419 @@ bool socketRecvUInt64(int socket_fd, uint64_t *value_ret, int64_t timeout_ns, ch
     return false;
   }
 
+  return true;
+}
+
+static bool datagram_send_polling(int socket_fd, void *sock_in_addr, void *addr, size_t bytes_to_write, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+  if (timed_out_ret != NULL) *timed_out_ret = false;
+  int64_t start_time = clockTimeNanoseconds();
+
+  while (1) {
+    int flags = 0;
+    size_t bytes_written = sendto(socket_fd, addr, bytes_to_write, flags, (struct sockaddr *)sock_in_addr, sizeof(struct sockaddr_in));
+    if (bytes_written == bytes_to_write) {
+      // Transfer completed
+      break;
+    }
+    if (bytes_written == -1) {
+      if (errno == EAGAIN) {
+        // Nothing written, but no errors
+        if (timeout_ns >= 0) {
+          int64_t ellapsed_time = clockTimeNanoseconds() - start_time;
+          if (ellapsed_time >= timeout_ns) {
+            // Timed out
+            if (timed_out_ret != NULL) {
+              *timed_out_ret = true;
+              return true;
+            } else {
+              // Can't report the time out
+              TAKYON_RECORD_ERROR(error_message, "Timed out starting the transfer\n");
+              return false;
+            }
+          }
+        }
+        bytes_written = 0;
+      } else if (errno == EMSGSIZE) {
+        TAKYON_RECORD_ERROR(error_message, "Failed to send datagram message. %lld bytes exceeds the datagram size\n", (long long)bytes_to_write);
+        return false;
+      } else if (errno == EINTR) { 
+        // Interrupted by external signal. Just try again
+        bytes_written = 0;
+      } else {
+        TAKYON_RECORD_ERROR(error_message, "Failed to write to socket: errno=%d\n", errno);
+        return false;
+      }
+    } else if (bytes_written == 0) {
+      // Keep trying
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Wrote a partial datagram: bytes_sent=%lld, bytes_to_send=%lld\n", bytes_written, bytes_to_write);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool datagram_send_event_driven(int socket_fd, void *sock_in_addr, void *addr, size_t bytes_to_write, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+  if (timed_out_ret != NULL) *timed_out_ret = false;
+
+  // Set the timeout on the socket
+  if (!setSocketTimeout(socket_fd, SO_SNDTIMEO, timeout_ns, error_message)) return false;
+
+  while (1) {
+    // Write the data
+    int flags = 0;
+    size_t bytes_written = sendto(socket_fd, addr, bytes_to_write, flags, (struct sockaddr *)sock_in_addr, sizeof(struct sockaddr_in));
+    if (bytes_written == bytes_to_write) {
+      // Transfer completed
+      return true;
+    }
+
+    // Something went wrong
+    if (bytes_written == -1) {
+      if (errno == EMSGSIZE) {
+        TAKYON_RECORD_ERROR(error_message, "Failed to send datagram message. %lld bytes exceeds the allowable datagram size\n", (long long)bytes_to_write);
+        return false;
+      } else if (errno == EWOULDBLOCK) {
+        // Timed out
+        if (timed_out_ret != NULL) {
+          *timed_out_ret = true;
+          return true;
+        } else {
+          // Can't report the timed
+          TAKYON_RECORD_ERROR(error_message, "Timed out starting the transfer\n");
+          return false;
+        }
+      } else if (errno == EINTR) {
+        // Interrupted by external signal. Just try again
+      } else {
+        TAKYON_RECORD_ERROR(error_message, "Failed to write to socket: errno=%d\n", errno);
+        return false;
+      }
+    } else if (bytes_written == 0) {
+      // Keep trying
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Wrote a partial datagram: bytes_sent=%lld, bytes_to_send=%lld\n", bytes_written, bytes_to_write);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool datagram_recv_event_driven(int socket_fd, void *data_ptr, size_t buffer_bytes, uint64_t *bytes_read_ret, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+  if (timed_out_ret != NULL) *timed_out_ret = false;
+
+  // Set the timeout on the socket
+  if (!setSocketTimeout(socket_fd, SO_RCVTIMEO, timeout_ns, error_message)) return false;
+
+  while (1) {
+    int flags = 0;
+    ssize_t bytes_received = recvfrom(socket_fd, data_ptr, buffer_bytes, flags, NULL, NULL);
+    if (bytes_received > 0) {
+      // Got a datagram
+      *bytes_read_ret = (uint64_t)bytes_received;
+      return true;
+    }
+    if (bytes_received == 0) {
+      // Socket was probably closed by the remote side
+      TAKYON_RECORD_ERROR(error_message, "Read side of socket seems to be closed\n");
+      return false;
+    }
+    if (bytes_received == -1) {
+      if (errno == EWOULDBLOCK) {
+        // Timed out
+        if (timed_out_ret != NULL) {
+          *timed_out_ret = true;
+          return true;
+        } else {
+          // Can't report the timed
+          TAKYON_RECORD_ERROR(error_message, "Timed out starting the transfer\n");
+          return false;
+        }
+      } else if (errno == EINTR) {
+        // Interrupted by external signal. Just try again
+      } else {
+        TAKYON_RECORD_ERROR(error_message, "Failed to read from socket: errno=%d\n", errno);
+        return false;
+      }
+    }
+  }
+}
+
+static bool datagram_recv_polling(int socket_fd, void *data_ptr, size_t buffer_bytes, uint64_t *bytes_read_ret, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+  if (timed_out_ret != NULL) *timed_out_ret = false;
+  int64_t start_time = clockTimeNanoseconds();
+
+  while (1) {
+    int flags = 0;
+    ssize_t bytes_received = recvfrom(socket_fd, data_ptr, buffer_bytes, flags, NULL, NULL);
+    if (bytes_received > 0) {
+      // Got a datagram
+      *bytes_read_ret = (uint64_t)bytes_received;
+      return true;
+    }
+    if (bytes_received == 0) {
+      // Socket was probably closed by the remote side
+      TAKYON_RECORD_ERROR(error_message, "Read side of socket seems to be closed\n");
+      return false;
+    }
+    if (bytes_received == -1) {
+      if (errno == EAGAIN) {
+        // Nothing read, but no errors
+        if (timeout_ns >= 0) {
+          int64_t ellapsed_time = clockTimeNanoseconds() - start_time;
+          if (ellapsed_time >= timeout_ns) {
+            // Timed out
+            if (timed_out_ret != NULL) {
+              *timed_out_ret = true;
+              return true;
+            } else {
+              // Can't report the time out
+              TAKYON_RECORD_ERROR(error_message, "Timed out starting the transfer\n");
+              return false;
+            }
+          }
+        }
+      } else if (errno == EINTR) {
+        // Interrupted by external signal. Just try again
+      } else {
+        TAKYON_RECORD_ERROR(error_message, "Failed to read from socket: errno=%d\n", errno);
+        return false;
+      }
+    }
+  }
+}
+
+bool socketCreateUnicastSender(const char *ip_addr, uint16_t port_number, TakyonSocket *socket_fd_ret, void **sock_in_addr_ret, char *error_message) {
+  // Create a datagram socket on which to send.
+  int socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (socket_fd < 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to create datagram sender socket: errno=%d\n", errno);
+    return false;
+  }
+
+  struct sockaddr_in *sock_in_addr = malloc(sizeof(struct sockaddr_in));
+  if (sock_in_addr == NULL) {
+    TAKYON_RECORD_ERROR(error_message, "Out of memory\n");
+    close(socket_fd);
+    return false;
+  }
+  memset((char *)sock_in_addr, 0, sizeof(struct sockaddr_in));
+#ifdef __APPLE__
+  sock_in_addr->sin_len = sizeof(struct sockaddr_in);
+#endif
+  sock_in_addr->sin_family = AF_INET;
+  sock_in_addr->sin_addr.s_addr = inet_addr(ip_addr);
+  sock_in_addr->sin_port = htons(port_number);
+  *sock_in_addr_ret = sock_in_addr;
+
+  *socket_fd_ret = socket_fd;
+  return true;
+}
+
+bool socketDatagramSend(TakyonSocket socket_fd, void *sock_in_addr, void *addr, size_t bytes_to_write, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+  if (is_polling) {
+    return datagram_send_polling(socket_fd, sock_in_addr, addr, bytes_to_write, timeout_ns, timed_out_ret, error_message);
+  } else {
+    return datagram_send_event_driven(socket_fd, sock_in_addr, addr, bytes_to_write, timeout_ns, timed_out_ret, error_message);
+  }
+}
+
+bool socketCreateUnicastReceiver(const char *ip_addr, uint16_t port_number, bool allow_reuse, TakyonSocket *socket_fd_ret, char *error_message) {
+  // Create a datagram socket on which to receive.
+  int socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (socket_fd < 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to create datagram socket: errno=%d\n", errno);
+    return false;
+  }
+
+  // Bind to the proper port number with the IP address specified as INADDR_ANY.
+  // I.e. only allow packets received on the specified port number
+  struct sockaddr_in localSock;
+  memset((char *) &localSock, 0, sizeof(localSock));
+#ifdef __APPLE__
+  localSock.sin_len = sizeof(localSock);
+#endif
+  localSock.sin_family = AF_INET;
+  localSock.sin_port = htons(port_number);
+  if (strcmp(ip_addr, "Any") == 0) {
+    // NOTE: htonl(INADDR_ANY) will allow any IP interface to listen
+    localSock.sin_addr.s_addr = htonl(INADDR_ANY);
+  } else {
+    // Listen on a specific IP interface
+    localSock.sin_addr.s_addr = inet_addr(ip_addr);
+  }
+
+  if (allow_reuse) {
+    // This will allow a previously closed socket, that is still in the TIME_WAIT stage, to be used.
+    // This may accur if the application did not exit gracefully on a previous run.
+    int allow = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &allow, sizeof(allow)) != 0) {
+      TAKYON_RECORD_ERROR(error_message, "Failed to set datagram socket to SO_REUSEADDR. errno=%d\n", errno);
+      close(socket_fd);
+      return false;
+    }
+  }
+
+  // Bind the port number and socket
+  if (bind(socket_fd, (struct sockaddr*)&localSock, sizeof(localSock))) {
+    if (errno == EADDRINUSE) {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind datagram socket. The address is already in use or in a time wait state. May need to use the option '-reuse'\n");
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Failed to bind datagram socket: errno=%d\n", errno);
+    }
+    close(socket_fd);
+    return false;
+  }
+
+  *socket_fd_ret = socket_fd;
+  return true;
+}
+
+bool socketDatagramRecv(TakyonSocket socket_fd, void *data_ptr, size_t buffer_bytes, uint64_t *bytes_read_ret, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+  *bytes_read_ret = 0;
+  if (is_polling) {
+    return datagram_recv_polling(socket_fd, data_ptr, buffer_bytes, bytes_read_ret, timeout_ns, timed_out_ret, error_message);
+  } else {
+    return datagram_recv_event_driven(socket_fd, data_ptr, buffer_bytes, bytes_read_ret, timeout_ns, timed_out_ret, error_message);
+  }
+}
+
+bool socketCreateMulticastSender(const char *ip_addr, const char *multicast_group, uint16_t port_number, bool disable_loopback, int ttl_level, TakyonSocket *socket_fd_ret, void **sock_in_addr_ret, char *error_message) {
+  // Create a datagram socket on which to send.
+  int socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (socket_fd < 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to create datagram sender socket: errno=%d\n", errno);
+    return false;
+  }
+
+  // Disable loopback so you do not receive your own datagrams.
+  {
+    char loopch = 0;
+    socklen_t loopch_length = sizeof(loopch);
+    if (getsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, (char *)&loopch, &loopch_length) < 0) {
+      TAKYON_RECORD_ERROR(error_message, "Getting IP_MULTICAST_LOOP error when trying to determine loopback value");
+      close(socket_fd);
+      return false;
+    }
+    char expected_loopch = disable_loopback ? 0 : 1;
+    if (loopch != expected_loopch) {
+      loopch = expected_loopch;
+      if (setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loopch, sizeof(loopch)) < 0) {
+        TAKYON_RECORD_ERROR(error_message, "Getting IP_MULTICAST_LOOP error when trying to %s loopback", expected_loopch ? "enable" : "disable");
+        close(socket_fd);
+        return false;
+      }
+    }
+  }
+
+  // Set local interface for outbound multicast datagrams.
+  // The IP address specified must be associated with a local, multicast capable interface.
+  {
+    struct in_addr localInterface;
+    localInterface.s_addr = inet_addr(ip_addr);
+    if (setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_IF, (char *)&localInterface, sizeof(localInterface)) < 0) {
+      TAKYON_RECORD_ERROR(error_message, "Failed to set local interface for multicast");
+      close(socket_fd);
+      return false;
+    }
+  }
+
+  // Set the Time-to-Live of the multicast to 1 so it's only on the local subnet.
+  {
+    // Supported levels:
+    // 0:   Are restricted to the same host
+    // 1:   Are restricted to the same subnet
+    // 32:  Are restricted to the same site
+    // 64:  Are restricted to the same region
+    // 128: Are restricted to the same continent
+    // 255: Are unrestricted in scope
+    int router_depth = ttl_level;
+    if (setsockopt(socket_fd, IPPROTO_IP, IP_MULTICAST_TTL, (char *)&router_depth, sizeof(router_depth)) < 0) {
+      TAKYON_RECORD_ERROR(error_message, "Failed to set IP_MULTICAST_TTL for multicast");
+      close(socket_fd);
+      return false;
+    }
+  }
+
+  // Set the multicast address
+  struct sockaddr_in *sock_in_addr = malloc(sizeof(struct sockaddr_in));
+  if (sock_in_addr == NULL) {
+    TAKYON_RECORD_ERROR(error_message, "Out of memory\n");
+    close(socket_fd);
+    return false;
+  }
+  memset((char *)sock_in_addr, 0, sizeof(struct sockaddr_in));
+#ifdef __APPLE__
+  sock_in_addr->sin_len = sizeof(struct sockaddr_in);
+#endif
+  sock_in_addr->sin_family = AF_INET;
+  sock_in_addr->sin_addr.s_addr = inet_addr(multicast_group);
+  sock_in_addr->sin_port = htons(port_number);
+  *sock_in_addr_ret = sock_in_addr;
+
+  *socket_fd_ret = socket_fd;
+  return true;
+}
+
+bool socketCreateMulticastReceiver(const char *ip_addr, const char *multicast_group, uint16_t port_number, bool allow_reuse, TakyonSocket *socket_fd_ret, char *error_message) {
+  // Create a datagram socket on which to receive.
+  int socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (socket_fd < 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to create multicast socket: errno=%d\n", errno);
+    return false;
+  }
+
+  // Bind to the proper port number with the IP address specified as INADDR_ANY.
+  // I.e. only allow packets received on the specified port number
+  struct sockaddr_in localSock;
+  memset((char *) &localSock, 0, sizeof(localSock));
+#ifdef __APPLE__
+  localSock.sin_len = sizeof(localSock);
+#endif
+  localSock.sin_family = AF_INET;
+  localSock.sin_port = htons(port_number);
+  // NOTE: htonl(INADDR_ANY) will allow any IP interface to listen
+  // IMPORTANT: can't use an actual IP address here or else won't work. The interface address is set when the group is set (below).
+  localSock.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  if (allow_reuse) {
+    // This will allow a previously closed socket, that is still in the TIME_WAIT stage, to be used.
+    // This may accur if the application did not exit gracefully on a previous run.
+    int allow = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &allow, sizeof(allow)) != 0) {
+      TAKYON_RECORD_ERROR(error_message, "Failed to set multicast socket to SO_REUSEADDR. errno=%d\n", errno);
+      close(socket_fd);
+      return false;
+    }
+  }
+
+  // Bind the port number and socket
+  if (bind(socket_fd, (struct sockaddr*)&localSock, sizeof(localSock))) {
+    if (errno == EADDRINUSE) {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind multicast socket. The address is already in use or in a time wait state. May need to use the option '-reuse'\n");
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Failed to bind multicast socket: errno=%d\n", errno);
+    }
+    close(socket_fd);
+    return false;
+  }
+
+  // Join the multicast group <multicast_group_addr> on the local network interface <reader_network_interface_addr> interface.
+  // Note that this IP_ADD_MEMBERSHIP option must be called for each local interface over which the multicast
+  // datagrams are to be received.
+  {
+    struct ip_mreq group;
+    group.imr_multiaddr.s_addr = inet_addr(multicast_group);
+    group.imr_interface.s_addr = inet_addr(ip_addr);
+    if (setsockopt(socket_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0) {
+      TAKYON_RECORD_ERROR(error_message, "Failed to add socket to the multicast group: errno=%d\n", errno);
+      close(socket_fd);
+      return false;
+    }
+  }
+
+  *socket_fd_ret = socket_fd;
   return true;
 }

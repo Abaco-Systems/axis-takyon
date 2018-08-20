@@ -181,10 +181,12 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
 #ifdef _WIN32
   if (strcmp(interconnect_module, "Memcpy") == 0) {
     setMemcpyFunctionPointers(private_path);
-  } else if (strcmp(interconnect_module, "Socket") == 0) {
-    setSocketFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "Mmap") == 0) {
     setMmapFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "Socket") == 0) {
+    setSocketFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "SocketDatagram") == 0) {
+    setSocketDatagramFunctionPointers(private_path);
   } else {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the functions for the interconnect module '%s'.\n", interconnect_module);

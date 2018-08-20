@@ -73,29 +73,54 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     fprintf(stderr, "ERROR in %s(): attributes->recv_completion_method must be TAKYON_BLOCKING\n", __FUNCTION__);
     abort();
   }
-  if (attributes->nbufs_AtoB <= 0) {
-    fprintf(stderr, "ERROR in %s(): attributes->nbufs_AtoB must be greater than 0\n", __FUNCTION__);
+  // IMPORTANT: The following will also need to be validate with each interconnect since some will have different requirements
+  if (attributes->nbufs_AtoB < 0) {
+    fprintf(stderr, "ERROR in %s(): attributes->nbufs_AtoB can not be negative\n", __FUNCTION__);
     abort();
   }
-  if (attributes->nbufs_BtoA <= 0) {
-    fprintf(stderr, "ERROR in %s(): attributes->nbufs_BtoA must be greater than 0\n", __FUNCTION__);
+  if (attributes->nbufs_BtoA < 0) {
+    fprintf(stderr, "ERROR in %s(): attributes->nbufs_BtoA can not be negative\n", __FUNCTION__);
     abort();
   }
-  if (attributes->sender_max_bytes_list == NULL) {
-    fprintf(stderr, "ERROR in %s(): attributes->sender_max_bytes_list is NULL\n", __FUNCTION__);
-    abort();
+  int nbufs_sender = attributes->is_endpointA ? attributes->nbufs_AtoB : attributes->nbufs_BtoA;
+  int nbufs_recver = attributes->is_endpointA ? attributes->nbufs_BtoA : attributes->nbufs_AtoB;
+  if (nbufs_sender > 0) {
+    if (attributes->sender_max_bytes_list == NULL) {
+      fprintf(stderr, "ERROR in %s(): attributes->sender_max_bytes_list is NULL\n", __FUNCTION__);
+      abort();
+    }
+    if (attributes->sender_addr_list == NULL) {
+      fprintf(stderr, "ERROR in %s(): attributes->sender_addr_list is NULL\n", __FUNCTION__);
+      abort();
+    }
+  } else {
+    if (attributes->sender_max_bytes_list != NULL) {
+      fprintf(stderr, "ERROR in %s(): Since this endpoint does not have any send buffers, attributes->sender_max_bytes_list must be NULL\n", __FUNCTION__);
+      abort();
+    }
+    if (attributes->sender_addr_list != NULL) {
+      fprintf(stderr, "ERROR in %s(): Since this endpoint does not have any send buffers, attributes->sender_addr_list must be NULL\n", __FUNCTION__);
+      abort();
+    }
   }
-  if (attributes->recver_max_bytes_list == NULL) {
-    fprintf(stderr, "ERROR in %s(): attributes->recver_max_bytes_list is NULL\n", __FUNCTION__);
-    abort();
-  }
-  if (attributes->sender_addr_list == NULL) {
-    fprintf(stderr, "ERROR in %s(): attributes->sender_addr_list is NULL\n", __FUNCTION__);
-    abort();
-  }
-  if (attributes->recver_addr_list == NULL) {
-    fprintf(stderr, "ERROR in %s(): attributes->recver_addr_list is NULL\n", __FUNCTION__);
-    abort();
+  if (nbufs_recver > 0) {
+    if (attributes->recver_max_bytes_list == NULL) {
+      fprintf(stderr, "ERROR in %s(): attributes->recver_max_bytes_list is NULL\n", __FUNCTION__);
+      abort();
+    }
+    if (attributes->recver_addr_list == NULL) {
+      fprintf(stderr, "ERROR in %s(): attributes->recver_addr_list is NULL\n", __FUNCTION__);
+      abort();
+    }
+  } else {
+    if (attributes->recver_max_bytes_list != NULL) {
+      fprintf(stderr, "ERROR in %s(): Since this endpoint does not have any recv buffers, attributes->recver_max_bytes_list must be NULL\n", __FUNCTION__);
+      abort();
+    }
+    if (attributes->recver_addr_list != NULL) {
+      fprintf(stderr, "ERROR in %s(): Since this endpoint does not have any recv buffers, attributes->recver_addr_list must be NULL\n", __FUNCTION__);
+      abort();
+    }
   }
 
   attributes->error_message = (char *)malloc(MAX_ERROR_MESSAGE_CHARS);
@@ -143,7 +168,6 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   private_path->create_timeout_ns        = (int64_t)(attributes->create_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
   private_path->send_start_timeout_ns    = (int64_t)(attributes->send_start_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
   private_path->send_complete_timeout_ns = (int64_t)(attributes->send_complete_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
-  private_path->recv_start_timeout_ns    = (int64_t)(attributes->recv_start_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
   private_path->recv_complete_timeout_ns = (int64_t)(attributes->recv_complete_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
   private_path->destroy_timeout_ns       = (int64_t)(attributes->destroy_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
 
@@ -166,16 +190,14 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   path->attrs.recver_addr_list = NULL;
 
   // Allocate the memory for the buffer lists
-  int nbufs_sender = attributes->is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
-  int nbufs_recver = attributes->is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  path->attrs.sender_max_bytes_list = (uint64_t *)calloc(path->attrs.nbufs_AtoB, sizeof(uint64_t));
-  path->attrs.recver_max_bytes_list = (uint64_t *)calloc(path->attrs.nbufs_BtoA, sizeof(uint64_t));
-  path->attrs.sender_addr_list = (size_t *)calloc(nbufs_sender, sizeof(size_t));
-  path->attrs.recver_addr_list = (size_t *)calloc(nbufs_recver, sizeof(size_t));
-  if ((path->attrs.sender_max_bytes_list == NULL) ||
-      (path->attrs.recver_max_bytes_list == NULL) ||
-      (path->attrs.sender_addr_list == NULL) ||
-      (path->attrs.recver_addr_list == NULL)) {
+  if (nbufs_sender > 0) path->attrs.sender_max_bytes_list = (uint64_t *)calloc(path->attrs.nbufs_AtoB, sizeof(uint64_t));
+  if (nbufs_recver > 0) path->attrs.recver_max_bytes_list = (uint64_t *)calloc(path->attrs.nbufs_BtoA, sizeof(uint64_t));
+  if (nbufs_sender > 0) path->attrs.sender_addr_list = (size_t *)calloc(nbufs_sender, sizeof(size_t));
+  if (nbufs_recver > 0) path->attrs.recver_addr_list = (size_t *)calloc(nbufs_recver, sizeof(size_t));
+  if (((nbufs_sender > 0) && (path->attrs.sender_max_bytes_list == NULL)) ||
+      ((nbufs_recver > 0) && (path->attrs.recver_max_bytes_list == NULL)) ||
+      ((nbufs_sender > 0) && (path->attrs.sender_addr_list == NULL)) ||
+      ((nbufs_recver > 0) && (path->attrs.recver_addr_list == NULL))) {
     TAKYON_RECORD_ERROR(attributes->error_message, "Out of memory\n");
     if (path->attrs.sender_max_bytes_list != NULL) free(path->attrs.sender_max_bytes_list);
     if (path->attrs.recver_max_bytes_list != NULL) free(path->attrs.recver_max_bytes_list);
@@ -188,10 +210,10 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   }
 
   // Copy over the info for the buffer lists
-  for (int i=0; i<path->attrs.nbufs_AtoB; i++) {
+  for (int i=0; i<nbufs_sender; i++) {
     path->attrs.sender_max_bytes_list[i] = attributes->sender_max_bytes_list[i];
   }
-  for (int i=0; i<path->attrs.nbufs_BtoA; i++) {
+  for (int i=0; i<nbufs_recver; i++) {
     path->attrs.recver_max_bytes_list[i] = attributes->recver_max_bytes_list[i];
   }
   for (int i=0; i<nbufs_sender; i++) {
@@ -425,7 +447,7 @@ bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_
     return false;
   }
   // NOTE: num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret are allowed to be NULL
-  if (((private_path->recv_start_timeout_ns >= 0) || (private_path->recv_complete_timeout_ns >= 0)) && (timed_out_ret == NULL)) {
+  if ((private_path->recv_complete_timeout_ns >= 0) && (timed_out_ret == NULL)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "A timeout was set, so timed_out_ret must not be NULL\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
@@ -471,7 +493,7 @@ bool takyonRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_
     return false;
   }
   // NOTE: num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret are allowed to be NULL
-  if (((private_path->recv_start_timeout_ns >= 0) || (private_path->recv_complete_timeout_ns >= 0)) && (timed_out_ret == NULL)) {
+  if ((private_path->recv_complete_timeout_ns >= 0) && (timed_out_ret == NULL)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "A timeout was set, so timed_out_ret must not be NULL\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;

@@ -65,6 +65,12 @@ bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_of
   SocketPath *socket_path = (SocketPath *)private_path->private;
   XferBuffer *buffer = &socket_path->send_buffer_list[buffer_index];
 
+  // Verify connection is good
+  if (socket_path->connection_failed) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Connection is broken\n");
+    return false;
+  }
+
   // Validate fits on recver
   uint64_t total_bytes_to_recv = dest_offset + bytes;
   if (total_bytes_to_recv > buffer->remote_max_recver_bytes) {
@@ -91,7 +97,8 @@ bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_of
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to transfer header\n");
     return false;
   }
-  if ((private_path->send_complete_timeout_ns >= 0) && (*timed_out_ret == 1)) {
+  if ((private_path->send_complete_timeout_ns >= 0) && (*timed_out_ret == true)) {
+    // Timed out but no data was transfered yet
     return true;
   }
 
@@ -101,7 +108,8 @@ bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_of
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to transfer data\n");
     return false;
   }
-  if ((private_path->send_complete_timeout_ns >= 0) && (*timed_out_ret == 1)) {
+  if ((private_path->send_complete_timeout_ns >= 0) && (*timed_out_ret == true)) {
+    // Timed out but data was transfered
     socket_path->connection_failed = true;
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Timed out in the middle of a transfer\n");
     return false;
@@ -113,8 +121,6 @@ bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_of
   // Handle completion
   if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
     buffer->send_started = false;
-  //} else if (path->attrs.send_completion_method == TAKYON_NO_NOTIFICATION) {
-  //  buffer->send_started = false;
   } else if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
     // Nothing to do
   }
@@ -128,13 +134,20 @@ static
 bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   SocketPath *socket_path = (SocketPath *)private_path->private;
+
+  // Verify connection is good
+  if (socket_path->connection_failed) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Connection is broken\n");
+    return false;
+  }
+
   XferBuffer *buffer = &socket_path->send_buffer_list[buffer_index];
   if (!buffer->send_started) {
     socket_path->connection_failed = true;
     TAKYON_RECORD_ERROR(path->attrs.error_message, "sendTest() was called, but a prior send() was not called on buffer %d\n", buffer_index);
     return false;
   }
-  // Since memcpy can't be non-blocking, the transfer is complete.
+  // Since socket can't be non-blocking, the transfer is complete.
   // Mark the transfer as complete.
   buffer->send_started = false;
   return true;
@@ -159,6 +172,12 @@ bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *
   SocketPath *socket_path = (SocketPath *)private_path->private;
   XferBuffer *buffer = &socket_path->recv_buffer_list[buffer_index];
 
+  // Verify connection is good
+  if (socket_path->connection_failed) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Connection is broken\n");
+    return false;
+  }
+
   // Check if data already recved for this index
   if (buffer->got_data) {
     if (bytes_ret != NULL) *bytes_ret = buffer->recved_bytes;
@@ -179,13 +198,15 @@ bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *
 
   // Wait for the data
   while (1) {
+    // Get the header
     uint64_t header[4];
-    if (!socketRecv(socket_path->socket_fd, header, sizeof(header), path->attrs.is_polling, private_path->recv_start_timeout_ns, timed_out_ret, path->attrs.error_message)) {
+    if (!socketRecv(socket_path->socket_fd, header, sizeof(header), path->attrs.is_polling, private_path->recv_complete_timeout_ns, timed_out_ret, path->attrs.error_message)) {
       socket_path->connection_failed = true;
       TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to wait for header\n");
       return false;
     }
-    if ((private_path->recv_start_timeout_ns >= 0) && (*timed_out_ret == 1)) {
+    if ((private_path->recv_complete_timeout_ns >= 0) && (*timed_out_ret == true)) {
+      // Timed out but no data was transfered yet
       return true;
     }
     if (header[0] != XFER_COMMAND) { 
@@ -234,7 +255,8 @@ bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *
       TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to wait for data\n");
       return false;
     }
-    if ((private_path->recv_complete_timeout_ns >= 0) && (*timed_out_ret == 1)) {
+    if ((private_path->recv_complete_timeout_ns >= 0) && (*timed_out_ret == true)) {
+      // Timed out but data was transfered
       socket_path->connection_failed = true;
       TAKYON_RECORD_ERROR(path->attrs.error_message, "timed out in the middle of a transfer\n");
       return false;
@@ -345,10 +367,21 @@ bool tknDestroy(TakyonPath *path) {
 static
 #endif
 bool tknCreate(TakyonPath *path) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+  // Verify the number of buffers
+  if (path->attrs.nbufs_AtoB <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
+    return false;
+  }
+  if (path->attrs.nbufs_BtoA <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
+    return false;
+  }
 
-  // Determine the interconnect parameters
-  //   Format: "Socket -local -ID <ID>" or "SOCKET -IP <IP> -Port <port>"
+  // Supported formats:
+  //   "Socket -local -ID <ID> [-reuse]"
+  //   "Socket -remoteIP <IP> -port <port>"
+  //   "Socket -localIP <IP> -port <port> [-reuse]"
+  //   "Socket -localIP Any -port <port> [-reuse]"
   bool is_a_local_socket = argGetFlag(path->attrs.interconnect, "-local");
   int path_id;
   int temp_port_number = 0;
@@ -356,6 +389,7 @@ bool tknCreate(TakyonPath *path) {
   unsigned short port_number = 0;
   char ip_addr[MAX_TAKYON_INTERCONNECT_CHARS];
   char local_socket_name[MAX_TAKYON_INTERCONNECT_CHARS];
+  bool allow_reuse = argGetFlag(path->attrs.interconnect, "-reuse");
 
   // Get interconnect params
   if (is_a_local_socket) {
@@ -399,6 +433,7 @@ bool tknCreate(TakyonPath *path) {
   }
 
   // Allocate private handle
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   SocketPath *socket_path = calloc(1, sizeof(SocketPath));
   if (socket_path == NULL) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
@@ -479,6 +514,7 @@ bool tknCreate(TakyonPath *path) {
     }
   }
 
+  // Create the socket and connect with remote endpoint
   if (is_a_local_socket) {
     if (path->attrs.is_endpointA) {
       if (!socketCreateLocalClient(local_socket_name, &socket_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
@@ -486,7 +522,7 @@ bool tknCreate(TakyonPath *path) {
         goto cleanup;
       }
     } else {
-      if (!socketCreateLocalServer(local_socket_name, &socket_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
+      if (!socketCreateLocalServer(local_socket_name, allow_reuse, &socket_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
         TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create local server socket\n");
         goto cleanup;
       }
@@ -498,7 +534,7 @@ bool tknCreate(TakyonPath *path) {
         goto cleanup;
       }
     } else {
-      if (!socketCreateTcpServer(ip_addr, port_number, &socket_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
+      if (!socketCreateTcpServer(ip_addr, port_number, allow_reuse, &socket_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
         TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create TCP server socket\n");
         goto cleanup;
       }

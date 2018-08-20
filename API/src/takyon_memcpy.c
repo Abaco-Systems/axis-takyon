@@ -125,8 +125,6 @@ static bool memcpySend(TakyonPath *path, int buffer_index, uint64_t num_blocks, 
   // Handle completion
   if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
     buffer->send_started = false;
-  //} else if (path->attrs.send_completion_method == TAKYON_NO_NOTIFICATION) {
-  //  buffer->send_started = false;
   } else if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
     // Nothing to do
   }
@@ -194,8 +192,6 @@ static bool pointerSend(TakyonPath *path, int buffer_index, uint64_t num_blocks,
   // Handle completion
   if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
     buffer->send_started = false;
-  //} else if (path->attrs.send_completion_method == TAKYON_NO_NOTIFICATION) {
-  //  buffer->send_started = false;
   } else if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
     // Nothing to do
   }
@@ -341,15 +337,15 @@ static bool memcpyRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks_
     // No data yet, so wait for data until the timeout occurs
     if (path->attrs.is_polling) {
       // Check timeout
-      if (private_path->recv_start_timeout_ns == TAKYON_NO_WAIT) {
+      if (private_path->recv_complete_timeout_ns == TAKYON_NO_WAIT) {
         // No timeout, so return now
         *timed_out_ret = true;
         return true;
-      } else if (private_path->recv_start_timeout_ns >= 0) {
+      } else if (private_path->recv_complete_timeout_ns >= 0) {
         // Hit the timeout without data, time to return
         int64_t time2 = clockTimeNanoseconds();
         int64_t diff = time2 - time1;
-        if (diff > private_path->recv_start_timeout_ns) {
+        if (diff > private_path->recv_complete_timeout_ns) {
           *timed_out_ret = true;
           return true;
         }
@@ -357,7 +353,7 @@ static bool memcpyRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks_
     } else {
       // Sleep while waiting for data
       bool timed_out;
-      bool suceeded = threadCondWait(&shared_item->mutex, &shared_item->cond, private_path->recv_start_timeout_ns, &timed_out, path->attrs.error_message);
+      bool suceeded = threadCondWait(&shared_item->mutex, &shared_item->cond, private_path->recv_complete_timeout_ns, &timed_out, path->attrs.error_message);
       if (!suceeded) {
         threadManagerMarkConnectionAsBad(shared_item);
         pthread_mutex_unlock(&shared_item->mutex);
@@ -438,15 +434,15 @@ static bool pointerRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
     // No data yet, so wait for data until the timeout occurs
     if (path->attrs.is_polling) {
       // Check timeout
-      if (private_path->recv_start_timeout_ns == TAKYON_NO_WAIT) {
+      if (private_path->recv_complete_timeout_ns == TAKYON_NO_WAIT) {
         // No timeout, so return now
         *timed_out_ret = true;
         return true;
-      } else if (private_path->recv_start_timeout_ns >= 0) {
+      } else if (private_path->recv_complete_timeout_ns >= 0) {
         // Hit the timeout without data, time to return
         int64_t time2 = clockTimeNanoseconds();
         int64_t diff = time2 - time1;
-        if (diff > private_path->recv_start_timeout_ns) {
+        if (diff > private_path->recv_complete_timeout_ns) {
           *timed_out_ret = true;
           return true;
         }
@@ -454,7 +450,7 @@ static bool pointerRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
     } else {
       // Sleep while waiting for data
       bool timed_out;
-      bool suceeded = threadCondWait(&shared_item->mutex, &shared_item->cond, private_path->recv_start_timeout_ns, &timed_out, path->attrs.error_message);
+      bool suceeded = threadCondWait(&shared_item->mutex, &shared_item->cond, private_path->recv_complete_timeout_ns, &timed_out, path->attrs.error_message);
       if (!suceeded) {
         threadManagerMarkConnectionAsBad(shared_item);
         pthread_mutex_unlock(&shared_item->mutex);
@@ -1042,13 +1038,24 @@ static bool pointerCreate(TakyonPath *path, int path_id) {
 static
 #endif
 bool tknCreate(TakyonPath *path) {
+  // Verify the number of buffers
+  if (path->attrs.nbufs_AtoB <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
+    return false;
+  }
+  if (path->attrs.nbufs_BtoA <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
+    return false;
+  }
+
   // Call this to make sure the mutex manager is ready to coordinate: This can be called multiple times, but it's garanteed to atomically run only the first time called.
   if (!threadManagerInit()) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to start the mutex manager\n");
     return false;
   }
 
-  // Determine the interconnect parameters
+  // Supported formats:
+  //   "Memcpy -ID <ID> [-share]"
   int path_id;
   bool found;
   bool ok = argGetInt(path->attrs.interconnect, "-ID", &path_id, &found, path->attrs.error_message);

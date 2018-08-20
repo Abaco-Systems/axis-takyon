@@ -15,7 +15,6 @@ utils_arg_parser.c \
 utils_endian.c \
 utils_memory_windows.c \
 utils_mmap_windows.c \
-utils_pthreads_windows.c \
 utils_shared_libraries.c \
 utils_socket_windows.c \
 utils_threads.c \
@@ -23,6 +22,7 @@ utils_time_windows.c \
 takyon_memcpy.c \
 takyon_mmap_windows.c \
 takyon_socket.c \
+takyon_socket_datagram.c \
 takyon.c
 
 # Build flags
@@ -38,7 +38,7 @@ DEBUG_CFLAGS    = -Zi -MDd # -MTd or -MDd
 
 DEBUG_LDFLAGS   = /DEBUG /FIXED:NO /NODEFAULTLIB:MSVCRT
 COMMON_FLAGS    = -nologo -Zm200 -D_CRT_SECURE_NO_WARNINGS=1 -WX -W3 -Zc:wchar_t- -w34189 -GR -EHsc
-CFLAGS          = $(RELEASE_CFLAGS) $(COMMON_FLAGS) -I..\..\inc -I..\..\inc\windows #+ -D_TIMESPEC_DEFINED -I.\Pre-built.2\include
+CFLAGS          = $(RELEASE_CFLAGS) $(COMMON_FLAGS) -I..\..\inc -I..\..\inc\windows
 TAKYON_C_OBJS   = $(TAKYON_C_FILES:.c=.obj)
 LIBRARY         = Takyon.lib
 

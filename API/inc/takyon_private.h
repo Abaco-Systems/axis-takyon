@@ -19,7 +19,6 @@ typedef struct {
   int64_t create_timeout_ns;
   int64_t send_start_timeout_ns;
   int64_t send_complete_timeout_ns;
-  int64_t recv_start_timeout_ns;
   int64_t recv_complete_timeout_ns;
   int64_t destroy_timeout_ns;
 
@@ -120,8 +119,8 @@ extern int64_t clockTimeNanoseconds();
 // Sockets
 extern bool socketCreateLocalClient(const char *socket_name, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message);
 extern bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message);
-extern bool socketCreateLocalServer(const char *socket_name, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message);
-extern bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message);
+extern bool socketCreateLocalServer(const char *socket_name, bool allow_reuse, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message);
+extern bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow_reuse, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message);
 extern bool socketSetBlocking(TakyonSocket socket_fd, bool is_blocking, char *error_message);
 extern bool socketSend(TakyonSocket socket_fd, void *addr, size_t bytes_to_write, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message);
 extern bool socketRecv(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message);
@@ -133,6 +132,14 @@ extern bool socketSendUInt64(TakyonSocket socket_fd, uint64_t value, int64_t tim
 extern bool socketRecvUInt64(TakyonSocket socket_fd, uint64_t *value_ret, int64_t timeout_ns, char *error_message);
 extern void socketClose(TakyonSocket socket_fd);
 
+// Connectionless sockets
+extern bool socketCreateUnicastSender(const char *ip_addr, uint16_t port_number, TakyonSocket *socket_fd_ret, void **sock_in_addr_ret, char *error_message);
+extern bool socketCreateUnicastReceiver(const char *ip_addr, uint16_t port_number, bool allow_reuse, TakyonSocket *socket_fd_ret, char *error_message);
+extern bool socketCreateMulticastSender(const char *ip_addr, const char *multicast_group, uint16_t port_number, bool disable_loopback, int ttl_level, TakyonSocket *socket_fd_ret, void **sock_in_addr_ret, char *error_message);
+extern bool socketCreateMulticastReceiver(const char *ip_addr, const char *multicast_group, uint16_t port_number, bool allow_reuse, TakyonSocket *socket_fd_ret, char *error_message);
+extern bool socketDatagramSend(TakyonSocket socket_fd, void *sock_in_addr, void *addr, size_t bytes_to_write, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message);
+extern bool socketDatagramRecv(TakyonSocket socket_fd, void *data_ptr, size_t buffer_bytes, uint64_t *bytes_read_ret, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message);
+
 // Pipes
 extern bool pipeWakeUpSelect(int read_pipe_fd, int write_pipe_fd, char *error_message);
 extern bool pipeCreate(const char *pipe_name, int *read_pipe_fd_ret, int *write_pipe_fd_ret, char *error_message);
@@ -141,6 +148,7 @@ extern void pipeDestroy(const char *pipe_name, int read_pipe_fd, int write_pipe_
 #ifdef _WIN32
 extern void setMemcpyFunctionPointers(TakyonPrivatePath *private_path);
 extern void setSocketFunctionPointers(TakyonPrivatePath *private_path);
+extern void setSocketDatagramFunctionPointers(TakyonPrivatePath *private_path);
 extern void setMmapFunctionPointers(TakyonPrivatePath *private_path);
 #endif
 

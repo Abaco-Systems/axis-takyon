@@ -143,8 +143,6 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   // Handle completion
   if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
     buffer->send_started = false;
-  //} else if (path->attrs.send_completion_method == TAKYON_NO_NOTIFICATION) {
-  //  buffer->send_started = false;
   } else if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
     // Nothing to do
   }
@@ -218,13 +216,13 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
     }
     if (path->attrs.is_polling) {
       // Check timeout
-      if (private_path->recv_start_timeout_ns == TAKYON_NO_WAIT) {
+      if (private_path->recv_complete_timeout_ns == TAKYON_NO_WAIT) {
         *timed_out_ret = 1;
         return true;
-      } else if (private_path->recv_start_timeout_ns >= 0) {
+      } else if (private_path->recv_complete_timeout_ns >= 0) {
         int64_t time2 = clockTimeNanoseconds();
         int64_t diff = time2 - time1;
-        if (diff > private_path->recv_start_timeout_ns) {
+        if (diff > private_path->recv_complete_timeout_ns) {
           *timed_out_ret = 1;
           return true;
         }
@@ -240,7 +238,7 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
                buffer_index);
       }
       bool timed_out;
-      bool suceeded = threadCondWait(mmap_path->mutex, mmap_path->connection_cond, private_path->recv_start_timeout_ns, &timed_out, path->attrs.error_message);
+      bool suceeded = threadCondWait(mmap_path->mutex, mmap_path->connection_cond, private_path->recv_complete_timeout_ns, &timed_out, path->attrs.error_message);
       if (!suceeded) {
         TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to wait for data\n");
         pthread_mutex_unlock(mmap_path->mutex);
@@ -335,7 +333,7 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
     // Release the mutex and cond var
     if (path->attrs.is_endpointA) {
       if (disconnect_successful) {
-        /*+ is there a way to correctly destroy these when the disconnect fails? */
+        // IMPORTANT: If the connection goes down due to a crash or somthing else, freeing these may cause an unexpected error. This may be a memory leak
         pthread_cond_destroy(mmap_path->connection_cond);
         pthread_mutex_destroy(mmap_path->mutex);
       }
@@ -461,9 +459,18 @@ bool tknDestroy(TakyonPath *path) {
 static
 #endif
 bool tknCreate(TakyonPath *path) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+  // Verify the number of buffers
+  if (path->attrs.nbufs_AtoB <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
+    return false;
+  }
+  if (path->attrs.nbufs_BtoA <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
+    return false;
+  }
 
-  // Determine the interconnect parameters
+  // Supported formats:
+  //   "Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]"
   int path_id;
   bool found;
   bool ok = argGetInt(path->attrs.interconnect, "-ID", &path_id, &found, path->attrs.error_message);
@@ -485,6 +492,7 @@ bool tknCreate(TakyonPath *path) {
   // Create local socket name used to coordinate connection and disconnection
   char socket_name[MAX_TAKYON_INTERCONNECT_CHARS];
   sprintf(socket_name, "TakyonMMAP_sock_%d", path_id);
+  bool allow_reuse = argGetFlag(path->attrs.interconnect, "-reuse");
 
   // Vebosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_INIT_DETAILS) {
@@ -518,6 +526,7 @@ bool tknCreate(TakyonPath *path) {
   }
 
   // Allocate private handle
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   MmapPath *mmap_path = calloc(1, sizeof(MmapPath));
   if (mmap_path == NULL) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
@@ -593,7 +602,7 @@ bool tknCreate(TakyonPath *path) {
       goto cleanup;
     }
   } else {
-    if (!socketCreateLocalServer(socket_name, &mmap_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
+    if (!socketCreateLocalServer(socket_name, allow_reuse, &mmap_path->socket_fd, private_path->create_timeout_ns, path->attrs.error_message)) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create local server socket\n");
       goto cleanup;
     }

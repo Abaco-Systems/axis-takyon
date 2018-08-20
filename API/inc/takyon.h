@@ -44,7 +44,6 @@
 
 typedef enum {
   TAKYON_BLOCKING = 0,        // Wait for the transfer to complete when calling takyonSend(), takyonSendStrided() or takyonRecv().
-  //TAKYON_NO_NOTIFICATION,     // For sending: start the transfer, and don't ask for notification of send completion. For receiving, don't call takyonRecv().
   TAKYON_USE_SEND_TEST        // After starting a send, must use takyonSendTest() to know when the send is complete.
 } TakyonCompletionMethod;
 
@@ -58,7 +57,6 @@ typedef struct {
   double create_timeout;        // Max time to create the connection
   double send_start_timeout;    // Max time to start sending a message
   double send_complete_timeout; // Max time to complete the send transfer
-  double recv_start_timeout;    // Max time to start receiving a message
   double recv_complete_timeout; // Max time to complete the recv transfer
   double destroy_timeout;       // Max time to gracefully shut the connection down
   // Transfer completion notification
