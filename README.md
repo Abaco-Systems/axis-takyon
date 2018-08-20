@@ -112,64 +112,64 @@ This reference implementation supports commonly used mechanisms for inter-thread
 These are the text strings passed into `attributes->interconnect[]`
 ### Connected Specifications (two sided)
 These are reliable two-way connections where both endpoints must be created together to allow for transfers.
-- Inter-thread (endpoints in the same process)
+- Inter-thread (endpoints in the same process)  
 `Memcpy -ID <ID> [-share]`
-- Inter-process (endpoints in the same OS)
-`Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]`
-`Socket -local -ID <ID> [-reuse]`
-`Socket -remoteIP 127.0.0.1 -port <port>`
-`Socket -localIP 127.0.0.1 -port <port> [-reuse]`
+- Inter-process (endpoints in the same OS)  
+`Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]`  
+`Socket -local -ID <ID> [-reuse]`  
+`Socket -remoteIP 127.0.0.1 -port <port>`  
+`Socket -localIP 127.0.0.1 -port <port> [-reuse]`  
 `Socket -localIP Any -port <port> [-reuse]`
-- Inter-processor (endpoints not in the same OS)
-`Socket -remoteIP <IP> -port <port>`
-`Socket -localIP <IP> -port <port> [-reuse]`
+- Inter-processor (endpoints not in the same OS)  
+`Socket -remoteIP <IP> -port <port>`  
+`Socket -localIP <IP> -port <port> [-reuse]`  
 `Socket -localIP Any -port <port> [-reuse]`
 ### Bi-Directional Parameter Descriptions
-- `-ID <ID>`
+- `-ID <ID>`  
 Can be any integer
-- `-share`
+- `-share`  
 Sender and receiver share the same buffers. Don't put data in the sender buffer until the receiver is done processing on the buffer.
-- `-app_alloced_recv_mem`
+- `-app_alloced_recv_mem`  
 Informs the path that all of the receive buffers where allocated by the application using a named memory map.
-- `-remote_mmap_prefix <name>`
+- `-remote_mmap_prefix <name>`  
 If the remote endpoint is using an application allocated named memory map for the buffers, this defines the name used to create the memory maps.
-- `-local`
+- `-local`  
 Uses a Unix local socket which is better performance due to avoid some of the TCP stack
-- `-remoteIP 127.0.0.1`
+- `-remoteIP 127.0.0.1`  
 The client side of the connection. 127.0.0.1 is a special loop back address used to keep communication local (in the same OS). This uses the full TCP stack so it's not as efficient as using `-local`.
-- `-localIP 127.0.0.1`
+- `-localIP 127.0.0.1`  
 The server side of the loop back connection.
-- `-port <port>`
+- `-port <port>`  
 Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
-- `-remoteIP <IP>`
+- `-remoteIP <IP>`  
 The client side of the TCP connection. The IP address must be the same as the server side (`-localIP` side).
-- `-localIP <IP>`
+- `-localIP <IP>`  
 The server side of the TCP connection. The IP address must be the same as the client side (`-remoteIP` side).
-- `-localIP Any`
+- `-localIP Any`  
 The server side of the TCP connection. This allows the connection to occur on any IP interface that is listening on the specified port number. Since the client side must specify an IP address, this inherently defines the IP interface that will be used on the server side. Be careful to avoid multiple interfaces using the same port number.
-- `-reuse`
+- `-reuse`  
 In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
 ### Connectionless Specifications (one sided)
 These are one sided connections where only one side needs to be created to allow for unreliable UDP (user datagram protocol) transfers. Typically good for live-streaming services and IO devices where it's OK to periodically drop data.
-- Inter-process & inter-processor
-`SocketDatagram -unicastSend -remoteIP <IP> -port <port>`
-`SocketDatagram -unicastRecv -localIP <IP> -port <port> [-reuse]`
-`SocketDatagram -multicastSend -localIP <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]`
+- Inter-process & inter-processor  
+`SocketDatagram -unicastSend -remoteIP <IP> -port <port>`  
+`SocketDatagram -unicastRecv -localIP <IP> -port <port> [-reuse]`  
+`SocketDatagram -multicastSend -localIP <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]`  
 `SocketDatagram -multicastRecv -localIP <IP> -group <IP> -port <port> [-reuse]`
 ### Connectionless Parameter Descriptions
-- `-remoteIP <IP>`
+- `-remoteIP <IP>`  
 The sender side of a UDP connection. The IP address must be where the datagrams will be sent to.
-- `-localIP <IP>`
+- `-localIP <IP>`  
 The IP addr of the local interface of the UDP connection. If this is a unicast, then the IP address can be 'Any' which will listen for activity on any interface for the specified port number.
-- `-group <IP>`
+- `-group <IP>`  
 The multicast group to join. The IP address must be in the range 224.0.0.0 through 239.255.255.255. Some are reserved so make sure to use an unused address.
-- `-port <port>`
+- `-port <port>`  
 Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
-- `-reuse`
+- `-reuse`  
 In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
-- `-disable_loopback`
+- `-disable_loopback`  
 By default, a multicast sender will also transfer the datagram to itself. Use this flag to stop this.
-- `-TTL <n>`
+- `-TTL <n>`  
 This defines how far down the network the multicast datagram will be sent:
 0:   Restricted to the same host
 1:   Restricted to the same subnet (this is the default value if the -TTL flag is not specified)
