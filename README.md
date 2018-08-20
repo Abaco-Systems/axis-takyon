@@ -103,6 +103,10 @@ This reference implementation supports commonly used mechanisms for inter-thread
 - Can use local sockets (if in the same OS only) or TCP sockets. If using local sockets, on Linux and Mac, it will use a local Unix socket which will have better performance than using a TCP socket with IP address 127.0.0.1. On Windows it uses 127.0.0.1 with a TCP connection since local Unix sockets do not exist on Windows.
 - The socket option "TCP No delay" is turned on to improve latency.
 - If polling is used (i.e. `attrs.is_polling = true`), sockets do not require both endpoints to be polling.
+### SocketDatagram
+- Endpoints can be in the same OS or different OSes, but in the same IP network. Only are independent of each other. Remote endpoint does not need to be a Takyon endpoint. Also used for UDP enabled IO devices.
+- Is used for UDP connectionless transfers (good for live-streaming and multicasting)
+- Endpoint A is always a sender and endpoint B is always a receiver.
 
 ## Interconnect Specifications
 These are the text strings passed into `attributes->interconnect[]`
@@ -144,7 +148,7 @@ The server side of the TCP connection. The IP address must be the same as the cl
 - `-localIP Any`
 The server side of the TCP connection. This allows the connection to occur on any IP interface that is listening on the specified port number. Since the client side must specify an IP address, this inherently defines the IP interface that will be used on the server side. Be careful to avoid multiple interfaces using the same port number.
 - `-reuse`
-In the case where a socket connection is shut down and then reused, it may not be usable immediatlely due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
+In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
 ### Connectionless Specifications (one sided)
 These are one sided connections where only one side needs to be created to allow for unreliable UDP (user datagram protocol) transfers. Typically good for live-streaming services and IO devices where it's OK to periodically drop data.
 - Inter-process & inter-processor
@@ -156,13 +160,13 @@ These are one sided connections where only one side needs to be created to allow
 - `-remoteIP <IP>`
 The sender side of a UDP connection. The IP address must be where the datagrams will be sent to.
 - `-localIP <IP>`
-The IP addr of the local interface of the UDP connection. If this is a unicast, then the IP address can be 'Any' which will listend for activity on any interface for the specified port number.
+The IP addr of the local interface of the UDP connection. If this is a unicast, then the IP address can be 'Any' which will listen for activity on any interface for the specified port number.
 - `-group <IP>`
 The multicast group to join. The IP address must be in the range 224.0.0.0 through 239.255.255.255. Some are reserved so make sure to use an unused address.
 - `-port <port>`
 Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
 - `-reuse`
-In the case where a socket connection is shut down and then reused, it may not be usable immediatlely due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
+In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
 - `-disable_loopback`
 By default, a multicast sender will also transfer the datagram to itself. Use this flag to stop this.
 - `-TTL <n>`
