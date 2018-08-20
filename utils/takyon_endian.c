@@ -11,7 +11,7 @@
 
 #include "takyon_utils.h"
 
-int takyonEndianIsBig() {
+bool takyonEndianIsBig() {
   long int testInt = 0x12345678;
   char *ptr = (char *)&testInt;
   if (ptr[0] == 0x78) {

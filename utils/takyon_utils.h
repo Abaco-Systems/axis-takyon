@@ -24,7 +24,7 @@ extern void takyonSleep(double dseconds);
 extern double takyonTime();
 
 // Endian
-extern int takyonEndianIsBig();
+extern bool takyonEndianIsBig();
 extern void takyonEndianSwapUInt16(uint16_t *data, uint64_t num_elements);
 extern void takyonEndianSwapUInt32(uint32_t *data, uint64_t num_elements);
 extern void takyonEndianSwapUInt64(uint64_t *data, uint64_t num_elements);

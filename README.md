@@ -13,7 +13,7 @@
   limitations under the License.
 
 ## About
-Takyon is a high level, high speed, portable, reliable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the embedded HPC industry, with no intention to compete with MPI which is focused on the HPC industry. Like MPI, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API. This is to provide an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application).
+Takyon is a high level, high speed, portable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the embedded HPC industry, with no intention to compete with MPI which is focused on the HPC industry. Like MPI, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API. This is to provide an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application).
 
 Takyon's mission statement: "<b>The flexibility and performance of low level. The simplicity of high level.</b>" 
 
@@ -106,20 +106,21 @@ This reference implementation supports commonly used mechanisms for inter-thread
 
 ## Interconnect Specifications
 These are the text strings passed into `attributes->interconnect[]`
-### Specifications
+### Connected Specifications (two sided)
+These are reliable two-way connections where both endpoints must be created together to allow for transfers.
 - Inter-thread (endpoints in the same process)
 `Memcpy -ID <ID> [-share]`
 - Inter-process (endpoints in the same OS)
-`Mmap -ID <ID> [-share] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]`
-`Socket -local -ID <ID>`
+`Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]`
+`Socket -local -ID <ID> [-reuse]`
 `Socket -remoteIP 127.0.0.1 -port <port>`
-`Socket -localIP 127.0.0.1 -port <port>`
-`Socket -localIP Any -port <port>`
+`Socket -localIP 127.0.0.1 -port <port> [-reuse]`
+`Socket -localIP Any -port <port> [-reuse]`
 - Inter-processor (endpoints not in the same OS)
 `Socket -remoteIP <IP> -port <port>`
-`Socket -localIP <IP> -port <port>`
-`Socket -localIP Any -port <port>`
-### Parameter Descriptions
+`Socket -localIP <IP> -port <port> [-reuse]`
+`Socket -localIP Any -port <port> [-reuse]`
+### Bi-Directional Parameter Descriptions
 - `-ID <ID>`
 Can be any integer
 - `-share`
@@ -142,7 +143,36 @@ The client side of the TCP connection. The IP address must be the same as the se
 The server side of the TCP connection. The IP address must be the same as the client side (`-remoteIP` side).
 - `-localIP Any`
 The server side of the TCP connection. This allows the connection to occur on any IP interface that is listening on the specified port number. Since the client side must specify an IP address, this inherently defines the IP interface that will be used on the server side. Be careful to avoid multiple interfaces using the same port number.
-
+- `-reuse`
+In the case where a socket connection is shut down and then reused, it may not be usable immediatlely due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
+### Connectionless Specifications (one sided)
+These are one sided connections where only one side needs to be created to allow for unreliable UDP (user datagram protocol) transfers. Typically good for live-streaming services and IO devices where it's OK to periodically drop data.
+- Inter-process & inter-processor
+`SocketDatagram -unicastSend -remoteIP <IP> -port <port>`
+`SocketDatagram -unicastRecv -localIP <IP> -port <port> [-reuse]`
+`SocketDatagram -multicastSend -localIP <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]`
+`SocketDatagram -multicastRecv -localIP <IP> -group <IP> -port <port> [-reuse]`
+### Connectionless Parameter Descriptions
+- `-remoteIP <IP>`
+The sender side of a UDP connection. The IP address must be where the datagrams will be sent to.
+- `-localIP <IP>`
+The IP addr of the local interface of the UDP connection. If this is a unicast, then the IP address can be 'Any' which will listend for activity on any interface for the specified port number.
+- `-group <IP>`
+The multicast group to join. The IP address must be in the range 224.0.0.0 through 239.255.255.255. Some are reserved so make sure to use an unused address.
+- `-port <port>`
+Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
+- `-reuse`
+In the case where a socket connection is shut down and then reused, it may not be usable immediatlely due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
+- `-disable_loopback`
+By default, a multicast sender will also transfer the datagram to itself. Use this flag to stop this.
+- `-TTL <n>`
+This defines how far down the network the multicast datagram will be sent:
+0:   Restricted to the same host
+1:   Restricted to the same subnet (this is the default value if the -TTL flag is not specified)
+32:  Restricted to the same site
+64:  Restricted to the same region
+128: Restricted to the same continent
+255: Unrestricted in scope
 ## Application Header Files
 These will be needed by Takyon applications:
 - Core APIs: `Takyon/API/inc/takyon.h`
@@ -151,7 +181,6 @@ These will be needed by Takyon applications:
 ## Running the Examples
 - The examples are found in `Takyon/examples/`
 - Each example has a `README.txt` which explains what is does and how to build and run.
-
 
 ## The Evolution of Takyon
 The Takyon API was formulated by Michael Both after about 20 years of challenging experiences with communication APIs for heterogeneous compute architectures in the embedded HPC industry. He implemented applications using many standard communication APIs (Socket, MPI, Verbs, Network Direct, named memory map, message queue, semaphore, mutex, cond var, memcpy, corba), many company proprietary APIs (Abaco, Mercury, Ixthos, Texas Instruments, Sparc, Sky Computers, Radstone Technologies, Google, Apple), and on many different architectures (Sparc, PPC, Sharc, TI, Intel, Arm, iOS, Android). In addition to using all these communication APIs, he also implemented one high level open standard (Abaco's MPI 1.x) and two high level proprietary APIs (Lockheed Martin's GEDAE and Abaco's AXIS Flow). This vast experience gave a great insight into the strengths and weaknesses of each communication API. One API did not fit all the needs of the common embedded HPC application, and it became clear that a better standard was needed for this audience. Khronos was first approached in 2017 to see if Takyon should become an open standard. In 2018 Khronos decided to create an exploratory group to determine industry interest.
