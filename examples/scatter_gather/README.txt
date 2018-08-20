@@ -94,12 +94,10 @@ Run:
       Terminal 1:
         > ./scatter_gather dataflow_test2.txt
       Terminal 2:
-        > ./scatter_gather dataflow_test2.txt -pathIndex 2
-      Terminal 3:
         > ./scatter_gather dataflow_test2.txt -pathIndex 3
-      Terminal 4:
+      Terminal 3:
         > ./scatter_gather dataflow_test2.txt -pathIndex 4
-      Terminal 5:
+      Terminal 4:
         > ./scatter_gather dataflow_test2.txt -pathIndex 5
 
   Windows:

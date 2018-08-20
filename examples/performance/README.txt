@@ -49,10 +49,10 @@ Run:
         > ./performance "Mmap -ID 1" -poll
         > ./performance "Mmap -ID 1 -share"
         > ./performance "Mmap -ID 1 -share" -poll
-        > ./performance "Socket -local -ID 1"
-        > ./performance "Socket -local -ID 1" -poll
-        > ./performance "Socket -localIP 127.0.0.1 -port 12345"
-        > ./performance "Socket -localIP Any -port 12345" -poll
+        > ./performance "Socket -local -ID 1 -reuse"
+        > ./performance "Socket -local -ID 1 -reuse" -poll
+        > ./performance "Socket -localIP 127.0.0.1 -port 12345 -reuse"
+        > ./performance "Socket -localIP Any -port 12345 -reuse" -poll
 
   Windows:
     Follow the same as above, but replace "./performance" with "performance"

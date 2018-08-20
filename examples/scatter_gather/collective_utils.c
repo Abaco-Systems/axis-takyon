@@ -60,7 +60,6 @@ TakyonPathAttributes allocPathAttributes(const char *interconnect, bool is_endpo
   attrs.create_timeout         = TAKYON_WAIT_FOREVER;
   attrs.send_start_timeout     = TAKYON_WAIT_FOREVER;
   attrs.send_complete_timeout  = TAKYON_WAIT_FOREVER;
-  attrs.recv_start_timeout     = TAKYON_WAIT_FOREVER;
   attrs.recv_complete_timeout  = TAKYON_WAIT_FOREVER;
   attrs.destroy_timeout        = TAKYON_WAIT_FOREVER;
   attrs.send_completion_method = TAKYON_BLOCKING;

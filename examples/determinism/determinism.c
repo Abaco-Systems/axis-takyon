@@ -21,8 +21,8 @@ static int      L_nbufs              = 1;
 static uint64_t L_nbytes             = 4;
 static int      L_ncycles            = 100000;
 static int      L_nprime_cycles      = 1;
-static int      L_histogram_nbuckets = 20;
-static int      L_usecs_per_bucket   = 5;
+static int      L_histogram_nbuckets = 30;
+static int      L_usecs_per_bucket   = 100;
 
 static void getArgValues(int argc, char **argv) {
   L_interconnect = argv[1];
@@ -100,7 +100,6 @@ static TakyonPathAttributes allocAttributes(bool is_endpointA) {
   attrs.create_timeout         = TAKYON_WAIT_FOREVER;
   attrs.send_start_timeout     = TAKYON_WAIT_FOREVER;
   attrs.send_complete_timeout  = TAKYON_WAIT_FOREVER;
-  attrs.recv_start_timeout     = TAKYON_WAIT_FOREVER;
   attrs.recv_complete_timeout  = TAKYON_WAIT_FOREVER;
   attrs.destroy_timeout        = TAKYON_WAIT_FOREVER;
   attrs.send_completion_method = TAKYON_BLOCKING;
