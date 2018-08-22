@@ -29,6 +29,10 @@ extern void takyonEndianSwapUInt16(uint16_t *data, uint64_t num_elements);
 extern void takyonEndianSwapUInt32(uint32_t *data, uint64_t num_elements);
 extern void takyonEndianSwapUInt64(uint64_t *data, uint64_t num_elements);
 
+// Setting path attributes
+TakyonPathAttributes takyonAllocAttributes(bool is_endpointA, bool is_polling, int nbufs_AtoB, int nbufs_BtoA, uint64_t bytes, double timeout, const char *interconnect);
+void takyonFreeAttributes(TakyonPathAttributes attrs);
+
 #ifdef __cplusplus
 }
 #endif

@@ -77,55 +77,10 @@ static void verifyTestData(uint8_t *data, uint64_t bytes, int cycle) {
   }
 }
 
-static TakyonPathAttributes allocAttributes(bool is_endpointA) {
-  uint64_t *sender_max_bytes_list = calloc(L_nbufs, sizeof(uint64_t));
-  if (sender_max_bytes_list == NULL) { fprintf(stderr, "Out of memory.\n"); abort(); }
-  uint64_t *recver_max_bytes_list = calloc(L_nbufs, sizeof(uint64_t));
-  if (recver_max_bytes_list == NULL) { fprintf(stderr, "Out of memory.\n"); abort(); }
-  size_t *sender_addr_list = calloc(L_nbufs, sizeof(uint64_t));
-  if (sender_addr_list == NULL) { fprintf(stderr, "Out of memory.\n"); abort(); }
-  size_t *recver_addr_list = calloc(L_nbufs, sizeof(uint64_t));
-  if (recver_addr_list == NULL) { fprintf(stderr, "Out of memory.\n"); abort(); }
-  for (int i=0; i<L_nbufs; i++) {
-    sender_max_bytes_list[i] = L_nbytes;
-    recver_max_bytes_list[i] = L_nbytes;
-  }
-
-  TakyonPathAttributes attrs;
-  attrs.is_endpointA           = is_endpointA;
-  attrs.is_polling             = L_is_polling;
-  attrs.abort_on_failure       = true;
-  attrs.verbosity              = TAKYON_VERBOSITY_ERRORS;
-  strncpy(attrs.interconnect, L_interconnect, MAX_TAKYON_INTERCONNECT_CHARS);
-  attrs.create_timeout         = TAKYON_WAIT_FOREVER;
-  attrs.send_start_timeout     = TAKYON_WAIT_FOREVER;
-  attrs.send_complete_timeout  = TAKYON_WAIT_FOREVER;
-  attrs.recv_complete_timeout  = TAKYON_WAIT_FOREVER;
-  attrs.destroy_timeout        = TAKYON_WAIT_FOREVER;
-  attrs.send_completion_method = TAKYON_BLOCKING;
-  attrs.recv_completion_method = TAKYON_BLOCKING;
-  attrs.nbufs_AtoB             = L_nbufs;
-  attrs.nbufs_BtoA             = L_nbufs;
-  attrs.sender_max_bytes_list  = sender_max_bytes_list;
-  attrs.recver_max_bytes_list  = recver_max_bytes_list;
-  attrs.sender_addr_list       = sender_addr_list;
-  attrs.recver_addr_list       = recver_addr_list;
-  attrs.error_message          = NULL;
-
-  return attrs;
-}
-
-static void freeAttributes(TakyonPathAttributes attrs) {
-  free(attrs.sender_max_bytes_list);
-  free(attrs.recver_max_bytes_list);
-  free(attrs.sender_addr_list);
-  free(attrs.recver_addr_list);
-}
-
 static void endpointTask(bool is_endpointA) {
-  TakyonPathAttributes attrs = allocAttributes(is_endpointA);
+  TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, L_is_polling, L_nbufs, L_nbufs, L_nbytes, TAKYON_WAIT_FOREVER, L_interconnect);
   TakyonPath *path = takyonCreate(&attrs);
-  freeAttributes(attrs);
+  takyonFreeAttributes(attrs);
 
   // Attributes
   if (!L_is_multi_threaded || is_endpointA) {

@@ -11,7 +11,7 @@
 
 
 TARGET       = performance.exe
-C_OBJS       = performance.obj takyon_time.obj
+C_OBJS       = performance.obj takyon_time.obj takyon_attributes.obj
 CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../utils
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
 LIBS         = ../../API/builds/windows_intel_64bit/Takyon.lib Ws2_32.lib

@@ -134,29 +134,9 @@ static bool recvData(TakyonPath *path, LifeCycleStats *stats) {
 }
 
 static void endpointTask(bool is_endpointA) {
-  TakyonPathAttributes attrs;
-  attrs.is_endpointA                = is_endpointA;
-  attrs.is_polling                  = L_is_polling;
-  attrs.abort_on_failure            = false;
-  attrs.verbosity                   = L_print_errors ? TAKYON_VERBOSITY_ERRORS : TAKYON_VERBOSITY_NONE;
-  strncpy(attrs.interconnect, L_interconnect, MAX_TAKYON_INTERCONNECT_CHARS);
-  attrs.create_timeout              = L_timeout;
-  attrs.send_start_timeout          = L_timeout;
-  attrs.send_complete_timeout       = L_timeout;
-  attrs.recv_complete_timeout       = L_timeout;
-  attrs.destroy_timeout             = L_timeout;
-  attrs.send_completion_method      = TAKYON_BLOCKING;
-  attrs.recv_completion_method      = TAKYON_BLOCKING;
-  attrs.nbufs_AtoB                  = 1;
-  attrs.nbufs_BtoA                  = 1;
-  uint64_t sender_max_bytes_list[1] = { BUFFER_BYTES };
-  attrs.sender_max_bytes_list       = sender_max_bytes_list;
-  uint64_t recver_max_bytes_list[1] = { BUFFER_BYTES };
-  attrs.recver_max_bytes_list       = recver_max_bytes_list;
-  size_t sender_addr_list[1]        = { 0 };
-  attrs.sender_addr_list            = sender_addr_list;
-  size_t recver_addr_list[1]        = { 0 };
-  attrs.recver_addr_list            = recver_addr_list;
+  TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, L_is_polling, 1, 1, BUFFER_BYTES, L_timeout, L_interconnect);
+  attrs.abort_on_failure = false;
+  attrs.verbosity = L_print_errors ? TAKYON_VERBOSITY_ERRORS : TAKYON_VERBOSITY_NONE;
 
   LifeCycleStats my_stats = initLifeCycleStats();
   LifeCycleStats remote_stats;
@@ -214,6 +194,9 @@ static void endpointTask(bool is_endpointA) {
       printTransferDetails(is_endpointA, &my_stats);
     }
   }
+
+  // Cleanup
+  takyonFreeAttributes(attrs);
 }
 
 static void *endpointThread(void *user_data) {

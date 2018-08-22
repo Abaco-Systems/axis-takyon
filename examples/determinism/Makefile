@@ -16,7 +16,7 @@ COMMON_FLAGS   := -std=gnu99 -Wall -Werror -pthread
 COMMON_FLAGS   += -O2
 CFLAGS         := $(COMMON_FLAGS) -I../../API/inc -I../../utils
 LDFLAGS        := $(COMMON_FLAGS) -rdynamic
-C_OBJS         := determinism.o takyon_time.o
+C_OBJS         := determinism.o takyon_time.o takyon_attributes.o
 TARGET         := $(APP_NAME)
 
 ifeq ($(OS),Windows_NT)
