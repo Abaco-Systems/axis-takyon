@@ -40,10 +40,10 @@ typedef struct {
   size_t sender_addr;
   size_t local_recver_addr;
   size_t remote_recver_addr;
-  MmapHandle local_mmap_flags;
-  MmapHandle local_mmap_app;
-  MmapHandle remote_mmap_flags;
-  MmapHandle remote_mmap_app;
+  MmapHandle local_mmap_flags;  // Sync flags
+  MmapHandle local_mmap_app;    // Data memory (creator)
+  MmapHandle remote_mmap_flags; // Sync flags
+  MmapHandle remote_mmap_app;   // Data memory (slave, even if allocated by app)
   bool send_started;
   volatile uint64_t *local_got_data_ref; // Making this uint64_t instead of bool to avoid alignment issues
   uint64_t *local_num_blocks_recved_ref;
@@ -366,7 +366,7 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
     int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
     for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
       // Free the local destination buffers
-      if (mmap_path->send_buffer_list[buf_index].recver_addr_alloced && mmap_path->recv_buffer_list[buf_index].local_mmap_app != NULL) {
+      if (mmap_path->recv_buffer_list[buf_index].recver_addr_alloced && mmap_path->recv_buffer_list[buf_index].local_mmap_app != NULL) {
         mmapFree(mmap_path->recv_buffer_list[buf_index].local_mmap_app, path->attrs.error_message);
       }
       if (mmap_path->recv_buffer_list[buf_index].local_mmap_flags != NULL) {
@@ -470,7 +470,7 @@ bool tknCreate(TakyonPath *path) {
   }
 
   // Supported formats:
-  //   "Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]"
+  //   "Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mmap] [-remote_mmap_prefix <name>]"
   int path_id;
   bool found;
   bool ok = argGetInt(path->attrs.interconnect, "-ID", &path_id, &found, path->attrs.error_message);
@@ -481,7 +481,7 @@ bool tknCreate(TakyonPath *path) {
   // Check if shared pointer or memcpy
   bool is_shared_pointer = argGetFlag(path->attrs.interconnect, "-share");
   // Check if the application will be providing the mmap memory for the remote side
-  bool app_alloced_recv_mem = argGetFlag(path->attrs.interconnect, "-app_alloced_recv_mem");
+  bool app_alloced_recv_mmap = argGetFlag(path->attrs.interconnect, "-app_alloced_recv_mmap");
   bool has_remote_mmap_prefix = false;
   char remote_mmap_prefix[MAX_MMAP_NAME_CHARS];
   ok = argGetText(path->attrs.interconnect, "-remote_mmap_prefix", remote_mmap_prefix, MAX_MMAP_NAME_CHARS, &has_remote_mmap_prefix, path->attrs.error_message);
@@ -505,10 +505,10 @@ bool tknCreate(TakyonPath *path) {
 
   // Verify dest addresses are all Takyon managed. This is because mmap can't map already created memory.
   int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  if (!app_alloced_recv_mem) {
+  if (!app_alloced_recv_mmap) {
     for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
       if (path->attrs.recver_addr_list[buf_index] != 0) {
-        TAKYON_RECORD_ERROR(path->attrs.error_message, "All addresses in path->attrs.recver_addr_list must be NULL and will be allocated by Takyon, unless the flag '-app_alloced_recv_mem' is set which means the app allocated the receive side memory map addresses for each buffer.\n");
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "All addresses in path->attrs.recver_addr_list must be NULL and will be allocated by Takyon, unless the flag '-app_alloced_recv_mmap' is set which means the app allocated the receive side memory map addresses for each buffer.\n");
         return false;
       }
     }
@@ -561,13 +561,13 @@ bool tknCreate(TakyonPath *path) {
     }
   }
   for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
-    // Recver (this should not be set by application, unless the app specifically set the flag -app_alloced_recv_mem)
-    if (app_alloced_recv_mem) {
+    // Recver (this should not be set by application, unless the app specifically set the flag -app_alloced_recv_mmap)
+    if (app_alloced_recv_mmap) {
       uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
       if (recver_bytes > 0) {
         size_t recver_addr = path->attrs.recver_addr_list[buf_index];
         if (recver_addr == 0) {
-          TAKYON_RECORD_ERROR(path->attrs.error_message, "attrs.recver_addr_list[%d]=0, but the flag '-app_alloced_recv_mem' has been set which means the application must allocate all the buffers with memory mapped addresses.\n", buf_index);
+          TAKYON_RECORD_ERROR(path->attrs.error_message, "attrs.recver_addr_list[%d]=0, but the flag '-app_alloced_recv_mmap' has been set which means the application must allocate all the buffers with memory mapped addresses.\n", buf_index);
           goto cleanup;
         } else {
           mmap_path->recv_buffer_list[buf_index].local_recver_addr = recver_addr;
@@ -713,7 +713,7 @@ bool tknCreate(TakyonPath *path) {
     *mmap_path->recv_buffer_list[buf_index].local_offset_recved_ref          = 0;
     *mmap_path->recv_buffer_list[buf_index].local_stride_recved_ref          = 0;
     // Application memory
-    if (app_alloced_recv_mem) {
+    if (app_alloced_recv_mmap) {
       // Passed in by the application
       size_t recver_addr = path->attrs.recver_addr_list[buf_index];
       mmap_path->recv_buffer_list[buf_index].local_recver_addr = recver_addr;

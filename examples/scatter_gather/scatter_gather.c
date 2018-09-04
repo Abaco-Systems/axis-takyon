@@ -1,103 +1,86 @@
-// Copyright 2018 Abaco Systems
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//     http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// This file contains the core algorithm
 
-#include "collective_utils.h"
-#include "dataflow.h"
+#include "takyon_utils.h"
 #include "scatter_gather.h"
 
-void *masterScatterGatherFunction(void *user_data) {
-  DataflowDetails *dataflow = (DataflowDetails *)user_data;
-  bool     is_polling = dataflow->is_polling;
-  int      npaths     = dataflow->npaths;
-  int      nbufs      = dataflow->nbufs;
-  uint64_t nbytes     = dataflow->nbytes;
-  int      ncycles    = dataflow->ncycles;
-
-  // Create the paths
-  uint64_t master_bytes = nbytes*npaths;
-  uint64_t slave_bytes = nbytes;
-  ScatterGatherMaster group = scatterGatherMasterInit(npaths, dataflow->interconnect_list, is_polling, master_bytes, slave_bytes, nbufs);
-
-  // Run the main processing loop
+void masterTask(TakyonDataflow *dataflow, ThreadDesc *thread_desc, int ncycles) {
+  ScatterSrc *scatter_src = takyonGetScatterSrc(dataflow, "scatter", thread_desc->id);
+  GatherDest *gather_dest = takyonGetGatherDest(dataflow, "gather", thread_desc->id);
   int buffer = 0;
+  int nbufs = scatter_src->path_list[0]->attrs.nbufs_AtoB;
+  int num_slaves = scatter_src->npaths;
+  uint64_t master_bytes = scatter_src->path_list[0]->attrs.sender_max_bytes_list[0];
+  uint64_t slave_bytes = master_bytes / num_slaves;
+  uint64_t *nbytes_list = (uint64_t *)malloc(num_slaves*sizeof(uint64_t));
+  uint64_t *soffset_list = (uint64_t *)malloc(num_slaves*sizeof(uint64_t));
+  uint64_t *doffset_list = (uint64_t *)malloc(num_slaves*sizeof(uint64_t));
+
   for (int i=0; i<ncycles; i++) {
-    // Create the data
+    // Fill the data
+    uint8_t *send_addr = (uint8_t *)scatter_src->path_list[0]->attrs.sender_addr_list[buffer];
+    uint8_t *recv_addr = (uint8_t *)gather_dest->path_list[0]->attrs.recver_addr_list[buffer];
     for (uint64_t j=0; j<master_bytes; j++) {
-      group.scatter_addr_list[buffer][j] = (uint8_t)(j+ncycles);
-      group.gather_addr_list[buffer][j] = 0;
+      send_addr[j] = (uint8_t)(j+ncycles);
+      recv_addr[j] = 0;
     }
 
-    // Scatter the messages to the slaves
-    uint64_t offset_per_slave = slave_bytes;
-    scatterSend(group, buffer, slave_bytes, offset_per_slave);
+    // Send the data
+    for (int i=0; i<num_slaves; i++) {
+      nbytes_list[i] = slave_bytes;
+      soffset_list[i] = i*slave_bytes;
+      doffset_list[i] = 0;
+    }
+    takyonScatterSend(scatter_src, buffer, nbytes_list, soffset_list, doffset_list);
 
-    // Gather the modifed data
-    uint64_t expected_offset_per_slave = slave_bytes;
-    gatherRecv(group, buffer, expected_offset_per_slave);
+    // Wait for the modified data to arrive
+    takyonGatherRecv(gather_dest, buffer, nbytes_list, doffset_list);
 
-    // Verify the gathered data
+    // Verify the received data
     for (uint64_t j=0; j<master_bytes; j++) {
-      uint8_t expected = group.scatter_addr_list[buffer][j] + 1;
-      if (group.gather_addr_list[buffer][j] != expected) {
-        fprintf(stderr, "Gather received data[%lld]=%d but expect the value %d\n", (long long)j, group.gather_addr_list[buffer][j], expected);
-        abort();
+      uint8_t expected = send_addr[j] + 1;
+      if (recv_addr[j] != expected) {
+        fprintf(stderr, "Gather received data[%lld]=%d but expect the value %d\n", (long long)j, recv_addr[j], expected);
+        exit(EXIT_FAILURE);
       }
     }
 
-    // Go to the next buffer
-    buffer = (buffer+1) % group.nbufs;
+    buffer = (buffer + 1) % nbufs;
   }
-  printf("Master completed %d cycles\n", ncycles);
 
-  // Destroy the paths
-  scatterGatherGroupFinialize(group);
-
-  return NULL;
+  takyonScatterSrcFinalize(scatter_src);
+  takyonGatherDestFinalize(gather_dest);
+  free(nbytes_list);
+  free(soffset_list);
+  free(doffset_list);
 }
 
-void *slaveScatterGatherFunction(void *user_data) {
-  FunctionInfo *function_info = (FunctionInfo *)user_data;
-  int path_index = function_info->path_index;
-  DataflowDetails *dataflow = function_info->dataflow;
-  bool     is_polling = dataflow->is_polling;
-  int      nbufs      = dataflow->nbufs;
-  uint64_t nbytes     = dataflow->nbytes;
-  int      ncycles    = dataflow->ncycles;
-
-  // Create the path
-  ScatterGatherSlave group = scatterGatherSlaveInit(dataflow->interconnect_list[path_index].interconnectB, is_polling, nbytes, nbufs);
-
-  // Run the main processing loop
+void slaveTask(TakyonDataflow *dataflow, ThreadDesc *thread_desc, int ncycles) {
+  ScatterDest *scatter_dest = takyonGetScatterDest(dataflow, "scatter", thread_desc->id);
+  GatherSrc *gather_src = takyonGetGatherSrc(dataflow, "gather", thread_desc->id);
+  int task_instance = takyonGetTaskInstance(dataflow, thread_desc->id);
   int buffer = 0;
+  int nbufs = scatter_dest->path->attrs.nbufs_AtoB;
+  uint64_t slave_bytes = scatter_dest->path->attrs.recver_max_bytes_list[0];
+
   for (int i=0; i<ncycles; i++) {
-    // Receive the data
-    uint64_t nbytes, offset;
-    scatterRecv(group, buffer, &nbytes, &offset);
+    // Wait for the data
+    uint64_t nbytes;
+    uint64_t offset;
+    takyonScatterRecv(scatter_dest, buffer, &nbytes, &offset);
 
     // Modify the data
-    uint8_t *recv_data_ptr = (uint8_t *)(group.path->attrs.recver_addr_list[buffer] + offset);
-    uint8_t *send_data_ptr = (uint8_t *)(group.path->attrs.sender_addr_list[buffer] + offset);
-    for (uint64_t j=0; j<nbytes; j++) { send_data_ptr[j] = recv_data_ptr[j] + 1; }
+    uint8_t *recv_addr = (uint8_t *)scatter_dest->path->attrs.recver_addr_list[buffer];
+    uint8_t *send_addr = (uint8_t *)gather_src->path->attrs.sender_addr_list[buffer];
+    for (uint64_t j=0; j<nbytes; j++) { send_addr[j] = recv_addr[j] + 1; }
 
     // Send back the modified data
-    uint64_t dest_offset = path_index * nbytes;
-    gatherSend(group, buffer, nbytes, offset, dest_offset);
+    uint64_t soffset = 0;
+    uint64_t doffset = task_instance * slave_bytes;
+    takyonGatherSend(gather_src, buffer, nbytes, soffset, doffset);
 
-    // Go to the next buffer
-    buffer = (buffer+1) % nbufs;
+    buffer = (buffer + 1) % nbufs;
   }
-  printf("Slave %d completed %d cycles\n", path_index, ncycles);
 
-  // Destroy the path
-  scatterGatherSlaveFinalize(group);
-
-  return NULL;
+  takyonScatterDestFinalize(scatter_dest);
+  takyonGatherSrcFinalize(gather_src);
 }

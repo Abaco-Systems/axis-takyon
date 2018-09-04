@@ -1,0 +1,85 @@
+App: Scatter and Gather
+
+Tasks
+Task: master
+  ThreadIds: 0
+Task: slaves
+  ThreadIds: 1 2 3 4
+
+Processes
+Process: 0
+  ThreadIds: 0
+Process: 1
+  ThreadIds: 1 2
+Process: 2
+  ThreadIds: 3 4
+
+MemoryBlocks
+MemoryBlock: scatterSrc0
+  ProcessId: 0
+  Where: CPU
+  Bytes: 4000
+MemoryBlock: scatterSrc1
+  ProcessId: 0
+  Where: CPU
+  Bytes: 4000
+# NOTE: Only the gather receive needs to have memory accesible by all 'Mmap' interconnect paths.
+MemoryBlock: gatherDest0
+  ProcessId: 0
+  Where: MMAP
+  Bytes: 4000
+MemoryBlock: gatherDest1
+  ProcessId: 0
+  Where: MMAP
+  Bytes: 4000
+
+Paths
+Defaults
+  IsPolling: false, false
+  AbortOnFailure: false, false
+  Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
+  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  NBufsAtoB: 2, 2
+  NBufsBtoA: 2, 2
+  SenderMaxBytesList: 4000 4000, 1000 1000
+  RecverMaxBytesList: 4000 4000, 1000 1000
+  SenderAddrList: NULL NULL, NULL NULL
+  RecverAddrList: NULL NULL, NULL NULL
+Path: 0
+  ThreadId: 0, 1
+  InterconnectA: Mmap -ID 1 -app_alloced_recv_mmap
+  InterconnectB: Mmap -ID 1 -remote_mmap_prefix gatherDest
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+Path: 1
+  ThreadId: 0, 2
+  InterconnectA: Socket -local -ID 2
+  InterconnectB: Socket -local -ID 2
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+Path: 2
+  ThreadId: 0, 3
+  InterconnectA: Mmap -ID 2 -app_alloced_recv_mmap
+  InterconnectB: Mmap -ID 2 -remote_mmap_prefix gatherDest
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+Path: 3
+  ThreadId: 0, 4
+  InterconnectA: Socket -local -ID 4
+  InterconnectB: Socket -local -ID 4
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+
+CollectiveGroups
+CollectiveGroup: scatter
+  Type: SCATTER
+  PathSrcIds: 0:A 1:A 2:A 3:A
+CollectiveGroup: gather
+  Type: GATHER
+  PathSrcIds: 0:B 1:B 2:B 3:B

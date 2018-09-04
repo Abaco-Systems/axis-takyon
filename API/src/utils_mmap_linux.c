@@ -250,7 +250,7 @@ bool mmapFree(MmapHandle mmap_handle, char *error_message) {
     /* Unlink */
     rc = shm_unlink(mmap_handle->map_name);
     if (rc == -1) {
-      TAKYON_RECORD_ERROR(error_message, "Could not unlink memory map '%s'\n", mmap_handle->map_name);
+      TAKYON_RECORD_ERROR(error_message, "Could not unlink memory map '%s', errno=%d\n", mmap_handle->map_name, errno);
       return false;
     }
   }

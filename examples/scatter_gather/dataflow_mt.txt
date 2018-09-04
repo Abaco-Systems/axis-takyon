@@ -1,0 +1,74 @@
+App: Scatter and Gather
+
+Tasks
+Task: master
+  ThreadIds: 0
+Task: slaves
+  ThreadIds: 1 2 3
+
+Processes
+Process: 0
+  ThreadIds: 0 1 2 3
+
+MemoryBlocks
+MemoryBlock: scatterSrc0
+  ProcessId: 0
+  Where: CPU
+  Bytes: 3000
+MemoryBlock: scatterSrc1
+  ProcessId: 0
+  Where: CPU
+  Bytes: 3000
+MemoryBlock: gatherDest0
+  ProcessId: 0
+  Where: CPU
+  Bytes: 3000
+MemoryBlock: gatherDest1
+  ProcessId: 0
+  Where: CPU
+  Bytes: 3000
+
+Paths
+Defaults
+  IsPolling: false, false
+  AbortOnFailure: false, false
+  Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
+  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  NBufsAtoB: 2, 2
+  NBufsBtoA: 2, 2
+  SenderMaxBytesList: 3000 3000, 1000 1000
+  RecverMaxBytesList: 3000 3000, 1000 1000
+  SenderAddrList: NULL NULL, NULL NULL
+  RecverAddrList: NULL NULL, NULL NULL
+Path: 0
+  ThreadId: 0, 1
+  InterconnectA: Memcpy -ID 1
+  InterconnectB: Memcpy -ID 1
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+Path: 1
+  ThreadId: 0, 2
+  InterconnectA: Memcpy -ID 2
+  InterconnectB: Memcpy -ID 2
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+Path: 2
+  ThreadId: 0, 3
+  InterconnectA: Memcpy -ID 3
+  InterconnectB: Memcpy -ID 3
+  SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
+  RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
+
+CollectiveGroups
+CollectiveGroup: scatter
+  Type: SCATTER
+  PathSrcIds: 0:A 1:A 2:A
+CollectiveGroup: gather
+  Type: GATHER
+  PathSrcIds: 0:B 1:B 2:B

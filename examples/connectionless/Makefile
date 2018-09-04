@@ -31,6 +31,9 @@ else
     endif
 endif
 
+# Run with valgrind: valgrind -v --leak-check=yes ./connectionless "SocketDatagram -unicastSend -remoteIP 127.0.0.1 -port 12345" -endpointA
+# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./connectionless "SocketDatagram -unicastSend -remoteIP 127.0.0.1 -port 12345" -endpointA
+
 vpath %.c .
 vpath %.c ../../utils
 

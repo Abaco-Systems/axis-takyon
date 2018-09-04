@@ -31,7 +31,7 @@ This readme documents the supported operating systems and interconnects for Abac
 - Tested on OSX 10.13 64-bit using gcc
 - All interconnects are supported
 ### Windows
-- Tested on Window 10 64-bit using MSVC 2015
+- Tested on Window 10 64-bit using MSVC 2015 & 2017
 - All interconnects are supported
 
 ## Build Instructions
@@ -95,7 +95,7 @@ This reference implementation supports commonly used mechanisms for inter-thread
 - On unix, uses process shared Posix mutexes and conditional variables to handle atomic coordination. On Windows, uses processed based Mutex and Events.
 - Uses local sockets for connecting, disconnecting, and detecting disconnections.
 - Application can optionally pass in sender memory, otherwise it will be allocated by Takyon.
-- Application can optionally pass in pre-allocated named memory maps, otherwise it will be allocated by Takyon. In order to allow this, the interconnect flag `-app_alloced_recv_mem` must be set on the endpoint that allocates the named memory maps. The remote endpoint must then set the flag `-remote_mmap_prefix <prefix-name>`, where `<prefix-name><buffer_index>` is the name used when the memory mapped buffers were created. This is helpful when multiple communication paths are used to gather data into a contiguous buffer.
+- Application can optionally pass in pre-allocated named memory maps, otherwise it will be allocated by Takyon. In order to allow this, the interconnect flag `-app_alloced_recv_mmap` must be set on the endpoint that allocates the named memory maps. The remote endpoint must then set the flag `-remote_mmap_prefix <prefix-name>`, where `<prefix-name><buffer_index>` is the name used when the memory mapped buffers were created. This is helpful when multiple communication paths are used to gather data into a contiguous buffer.
 - If `-share` option is used:
   - Both endpoints will share the memory buffers for a particular direction (`AtoB` and `BtoA` are different directions). This is an advanced feature.
 ### Socket
@@ -115,7 +115,7 @@ These are reliable two-way connections where both endpoints must be created toge
 - Inter-thread (endpoints in the same process)  
 `Memcpy -ID <ID> [-share]`
 - Inter-process (endpoints in the same OS)  
-`Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mem] [-remote_mmap_prefix <name>]`  
+`Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mmap] [-remote_mmap_prefix <name>]`  
 `Socket -local -ID <ID> [-reuse]`  
 `Socket -remoteIP 127.0.0.1 -port <port>`  
 `Socket -localIP 127.0.0.1 -port <port> [-reuse]`  
@@ -129,7 +129,7 @@ These are reliable two-way connections where both endpoints must be created toge
 Can be any integer
 - `-share`  
 Sender and receiver share the same buffers. Don't put data in the sender buffer until the receiver is done processing on the buffer.
-- `-app_alloced_recv_mem`  
+- `-app_alloced_recv_mmap`  
 Informs the path that all of the receive buffers where allocated by the application using a named memory map.
 - `-remote_mmap_prefix <name>`  
 If the remote endpoint is using an application allocated named memory map for the buffers, this defines the name used to create the memory maps.

@@ -31,6 +31,9 @@ else
     endif
 endif
 
+# Run with valgrind: valgrind -v --leak-check=yes ./hello "Mmap -ID 1" -endpointA
+# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./hello "Mmap -ID 1" -endpointA
+
 all: $(TARGET)
 
 clean:

@@ -258,11 +258,12 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
 
   // Verbosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_RUNTIME) {
-    printf("%-15s (%s:%s) buf=%d, %lld bytes, soff=%lld, doff=%lld\n",
+    printf("%-15s (%s:%s) buf=%d, addr=%llu, %lld bytes, soff=%lld, doff=%lld\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
            path->attrs.interconnect,
            buffer_index,
+           (unsigned long long)path->attrs.sender_addr_list[buffer_index] + (unsigned long long)src_offset,
            (unsigned long long)bytes,
            (unsigned long long)src_offset,
            (unsigned long long)dest_offset);
