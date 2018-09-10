@@ -180,11 +180,22 @@ This defines how far down the network the multicast datagram will be sent:
 ## Application Header Files
 These will be needed by Takyon applications:
 - Core APIs: `Takyon/API/inc/takyon.h`
-- Utility APIs: `Takyon/utils/takyon_utils.h`
+- Open Source Extension APIs: `Takyon/extensions/takyon_extensions.h`
 
 ## Running the Examples
 - The examples are found in `Takyon/examples/`
 - Each example has a `README.txt` which explains what is does and how to build and run.
+
+## Overview of the Examples
+- hello_world_mt: The most basic Takyon application, specifically for two threads in a single process.
+- hello_world_mp: The most basic Takyon application, specifically for two processes (both are not required to be on the same processor).
+- hello_world_graph: The most basic Takyon application, designed to use the graph extension functions to make it more like MPI.
+- performance: Calculates the latency and throughput of any supported interconnect.
+- determinism: Shows the determinism of an interconnect via multple trasfer times displayed in a histogram.
+- fault_tolerant: Shows that connections can be broken (via timeouts, cable disconnection, or control-C) then recover from the failure.
+- pipeline: Uses the graph extension functions to create a long data processing path by connecting a set of Takyon paths in series.
+- scatter_gather: Uses the graph extension functions to create a collective example similar to MPI.
+- connectionless: Shows how Takyon can also be used with one sided connectionless interconnects (including multicast), such as live streaming and IO devices like video and Lidar.
 
 ## The Evolution of Takyon
 The Takyon API was formulated by Michael Both after about 20 years of challenging experiences with communication APIs for heterogeneous compute architectures in the embedded HPC industry. He implemented applications using many standard communication APIs (Socket, MPI, Verbs, Network Direct, named memory map, message queue, semaphore, mutex, cond var, memcpy, corba), many company proprietary APIs (Abaco, Mercury, Ixthos, Texas Instruments, Sparc, Sky Computers, Radstone Technologies, Google, Apple), and on many different architectures (Sparc, PPC, Sharc, TI, Intel, Arm, iOS, Android). In addition to using all these communication APIs, he also implemented one high level open standard (Abaco's MPI 1.x) and two high level proprietary APIs (Lockheed Martin's GEDAE and Abaco's AXIS Flow). This vast experience gave a great insight into the strengths and weaknesses of each communication API. One API did not fit all the needs of the common embedded HPC application, and it became clear that a better standard was needed for this audience. Khronos was first approached in 2017 to see if Takyon should become an open standard. In 2018 Khronos decided to create an exploratory group to determine industry interest.
