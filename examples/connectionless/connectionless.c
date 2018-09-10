@@ -10,7 +10,7 @@
 // limitations under the License.
 
 #include "takyon.h"
-#include "takyon_utils.h"
+#include "takyon_extensions.h"
 
 #define SECONDS_BETWEEN_PRINTS 1.0
 

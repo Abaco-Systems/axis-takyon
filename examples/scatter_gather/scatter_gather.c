@@ -1,11 +1,20 @@
-// This file contains the core algorithm
+// Copyright 2018 Abaco Systems
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//     http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#include "takyon_utils.h"
+#include "takyon_extensions.h"
 #include "scatter_gather.h"
 
-void masterTask(TakyonDataflow *dataflow, ThreadDesc *thread_desc, int ncycles) {
-  ScatterSrc *scatter_src = takyonGetScatterSrc(dataflow, "scatter", thread_desc->id);
-  GatherDest *gather_dest = takyonGetGatherDest(dataflow, "gather", thread_desc->id);
+void masterTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
+  TakyonScatterSrc *scatter_src = takyonGetScatterSrc(graph, "scatter", thread_info->id);
+  TakyonGatherDest *gather_dest = takyonGetGatherDest(graph, "gather", thread_info->id);
   int buffer = 0;
   int nbufs = scatter_src->path_list[0]->attrs.nbufs_AtoB;
   int num_slaves = scatter_src->npaths;
@@ -54,10 +63,10 @@ void masterTask(TakyonDataflow *dataflow, ThreadDesc *thread_desc, int ncycles) 
   free(doffset_list);
 }
 
-void slaveTask(TakyonDataflow *dataflow, ThreadDesc *thread_desc, int ncycles) {
-  ScatterDest *scatter_dest = takyonGetScatterDest(dataflow, "scatter", thread_desc->id);
-  GatherSrc *gather_src = takyonGetGatherSrc(dataflow, "gather", thread_desc->id);
-  int task_instance = takyonGetTaskInstance(dataflow, thread_desc->id);
+void slaveTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
+  TakyonScatterDest *scatter_dest = takyonGetScatterDest(graph, "scatter", thread_info->id);
+  TakyonGatherSrc *gather_src = takyonGetGatherSrc(graph, "gather", thread_info->id);
+  int task_instance = takyonGetThreadGroupInstance(graph, thread_info->id);
   int buffer = 0;
   int nbufs = scatter_dest->path->attrs.nbufs_AtoB;
   uint64_t slave_bytes = scatter_dest->path->attrs.recver_max_bytes_list[0];

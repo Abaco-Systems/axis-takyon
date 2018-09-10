@@ -363,7 +363,11 @@ static void *socket_disconnect_handler(void *user_arg) {
   MmapPath *mmap_path = (MmapPath *)private_path->private;
   bool got_socket_activity;
   bool ok = socketWaitForDisconnectActivity(mmap_path->socket_fd, -1, &got_socket_activity, path->attrs.error_message);
-  if ((!ok) || got_socket_activity) {
+  /*+ NOTE: will get activity when the socket barrier is used to shut down
+    Need to distinguish between a broken connection, Control-C and the shutdown barrier
+    The disconnect detection still works if a timeout on a transfer is used, which is not ideal.
+   */
+  if ((!ok) /*+ || got_socket_activity*/) {
     // Detected socket shutdown
     mmap_path->connected = false;
     // Wake up local receiver just in case it sleeping waiting on an Event

@@ -1,14 +1,12 @@
-App: Scatter and Gather
-
-Tasks
-Task: master
-  ThreadIds: 0
-Task: slaves
-  ThreadIds: 1 2 3
+ThreadGroups
+ThreadGroup: master
+  Instances: 1
+ThreadGroup: slaves
+  Instances: 3
 
 Processes
 Process: 0
-  ThreadIds: 0 1 2 3
+  Threads: master[0] slaves[0] slaves[1] slaves[2]
 
 MemoryBlocks
 MemoryBlock: scatterSrc0
@@ -31,7 +29,7 @@ MemoryBlock: gatherDest1
 Paths
 Defaults
   IsPolling: false, false
-  AbortOnFailure: false, false
+  AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
   CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
@@ -47,19 +45,19 @@ Defaults
   SenderAddrList: NULL NULL, NULL NULL
   RecverAddrList: NULL NULL, NULL NULL
 Path: 0
-  ThreadId: 0, 1
+  Thread: master[0], slaves[0]
   InterconnectA: Memcpy -ID 1
   InterconnectB: Memcpy -ID 1
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 1
-  ThreadId: 0, 2
+  Thread: master[0], slaves[1]
   InterconnectA: Memcpy -ID 2
   InterconnectB: Memcpy -ID 2
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 2
-  ThreadId: 0, 3
+  Thread: master[0], slaves[2]
   InterconnectA: Memcpy -ID 3
   InterconnectB: Memcpy -ID 3
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL

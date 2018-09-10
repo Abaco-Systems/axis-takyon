@@ -1,0 +1,55 @@
+ThreadGroups
+ThreadGroup: pipe
+  Instances: 5
+
+Processes
+Process: 0
+  Threads: pipe[0]
+Process: 1
+  Threads: pipe[1] pipe[2]
+Process: 2
+  Threads: pipe[3]
+Process: 3
+  Threads: pipe[4]
+
+MemoryBlocks
+
+Paths
+Defaults
+  IsPolling: false, false
+  AbortOnFailure: true, true
+  Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
+  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  NBufsAtoB: 2, 2
+  NBufsBtoA: 2, 2
+  SenderMaxBytesList: 100000 100000, 100000 100000
+  RecverMaxBytesList: 100000 100000, 100000 100000
+  SenderAddrList: NULL NULL, NULL NULL
+  RecverAddrList: NULL NULL, NULL NULL
+Path: 0
+  Thread: pipe[0], pipe[1]
+  InterconnectA: Socket -local -ID 1 -reuse
+  InterconnectB: Socket -local -ID 1 -reuse
+Path: 1
+  Thread: pipe[1], pipe[2]
+  InterconnectA: Memcpy -ID 1
+  InterconnectB: Memcpy -ID 1
+Path: 2
+  Thread: pipe[2], pipe[3]
+  InterconnectA: Mmap -ID 1 -reuse
+  InterconnectB: Mmap -ID 1 -reuse
+Path: 3
+  Thread: pipe[3], pipe[4]
+  InterconnectA: Socket -remoteIP 127.0.0.1 -port 12345
+  InterconnectB: Socket -localIP 127.0.0.1 -port 12345 -reuse
+
+CollectiveGroups
+CollectiveGroup: pipeline
+  Type: ONE2ONE
+  PathSrcIds: 0:A 1:A 2:A 3:A

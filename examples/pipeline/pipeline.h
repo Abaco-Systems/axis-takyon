@@ -9,10 +9,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _scatter_gather_h_
-#define _scatter_gather_h_
+#ifndef _pipeline_h_
+#define _pipeline_h_
 
-void masterTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
-void slaveTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
+void pipelineTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
 
 #endif

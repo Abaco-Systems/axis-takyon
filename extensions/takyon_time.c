@@ -9,7 +9,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "takyon_utils.h"
+#include "takyon_extensions.h"
 
 void takyonSleep(double dseconds) {
 #ifdef _WIN32

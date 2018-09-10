@@ -190,8 +190,8 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   path->attrs.recver_addr_list = NULL;
 
   // Allocate the memory for the buffer lists
-  if (nbufs_sender > 0) path->attrs.sender_max_bytes_list = (uint64_t *)calloc(path->attrs.nbufs_AtoB, sizeof(uint64_t));
-  if (nbufs_recver > 0) path->attrs.recver_max_bytes_list = (uint64_t *)calloc(path->attrs.nbufs_BtoA, sizeof(uint64_t));
+  if (nbufs_sender > 0) path->attrs.sender_max_bytes_list = (uint64_t *)calloc(nbufs_sender, sizeof(uint64_t));
+  if (nbufs_recver > 0) path->attrs.recver_max_bytes_list = (uint64_t *)calloc(nbufs_recver, sizeof(uint64_t));
   if (nbufs_sender > 0) path->attrs.sender_addr_list = (size_t *)calloc(nbufs_sender, sizeof(size_t));
   if (nbufs_recver > 0) path->attrs.recver_addr_list = (size_t *)calloc(nbufs_recver, sizeof(size_t));
   if (((nbufs_sender > 0) && (path->attrs.sender_max_bytes_list == NULL)) ||

@@ -10,13 +10,13 @@
 # limitations under the License.
 
 
-APP_NAME       := connectionless
+APP_NAME       := hello
 COMMON_FLAGS   := -std=gnu99 -Wall -Werror -pthread
 #COMMON_FLAGS   += -g -O0
 COMMON_FLAGS   += -O2
 CFLAGS         := $(COMMON_FLAGS) -I../../API/inc -I../../extensions
 LDFLAGS        := $(COMMON_FLAGS) -rdynamic
-C_OBJS         := connectionless.o takyon_time.o takyon_attributes.o
+C_OBJS         := main.o hello.o takyon_graph.o takyon_attributes.o takyon_collective.o takyon_mmap.o
 TARGET         := $(APP_NAME)
 
 ifeq ($(OS),Windows_NT)
@@ -31,8 +31,8 @@ else
     endif
 endif
 
-# Run with valgrind: valgrind -v --leak-check=yes ./connectionless "SocketDatagram -unicastSend -remoteIP 127.0.0.1 -port 12345" -endpointA
-# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./connectionless "SocketDatagram -unicastSend -remoteIP 127.0.0.1 -port 12345" -endpointA
+# Run with valgrind: valgrind -v --leak-check=yes ./hello 0 graph_mt.txt
+# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./hello 0 graph_mt.txt
 
 vpath %.c .
 vpath %.c ../../extensions

@@ -10,28 +10,17 @@
 // limitations under the License.
 
 #include "takyon_extensions.h"
-#include "scatter_gather.h"
+#include "pipeline.h"
 
 static int L_ncycles = 100;
 static TakyonGraph *L_graph = NULL;
 
 static void *thread_entry_function(void *user_data) {
   TakyonThread *thread_info = (TakyonThread *)user_data;
-  TakyonThreadGroup *thread_group = takyonGetThreadGroup(L_graph, thread_info->id);
-
   // Create Takyon paths
   takyonCreateGraphPaths(L_graph, thread_info->id);
-
   // Run correct thread
-  if (strcmp(thread_group->name, "master")==0) {
-    masterTask(L_graph, thread_info, L_ncycles);
-  } else if (strcmp(thread_group->name, "slaves")==0) {
-    slaveTask(L_graph, thread_info, L_ncycles);
-  } else {
-    printf("Could not find correct task to run in thread\n");
-    exit(EXIT_FAILURE);
-  }
-
+  pipelineTask(L_graph, thread_info, L_ncycles);
   // Destroy Takyon paths
   takyonDestroyGraphPaths(L_graph, thread_info->id);
   return NULL;
@@ -104,6 +93,6 @@ int main(int argc, char **argv) {
 
   // Free the graph resources
   takyonFreeGraphDescription(L_graph, process_id);
-  printf("Completed %d scatter gather cycles successfully!\n", L_ncycles);
+  printf("Completed %d pipeline cycles successfully!\n", L_ncycles);
   return 0;
 }

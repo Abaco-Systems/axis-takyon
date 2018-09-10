@@ -10,9 +10,9 @@
 # limitations under the License.
 
 
-TARGET       = hello.exe
-C_OBJS       = main.obj hello.obj takyon_dataflow.obj takyon_attributes.obj takyon_collective.obj
-CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../utils
+TARGET       = pipeline.exe
+C_OBJS       = main.obj pipeline.obj takyon_graph.obj takyon_attributes.obj takyon_collective.obj takyon_mmap.obj
+CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../extensions
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
 LIBS         = ../../API/builds/windows_intel_64bit/Takyon.lib Ws2_32.lib
 
@@ -23,7 +23,7 @@ all: $(TARGET)
 {.\}.c{}.obj::
 	cl -c $(CFLAGS) -Fo $<
 
-{..\..\utils\}.c{}.obj::
+{..\..\extensions\}.c{}.obj::
 	cl -c $(CFLAGS) -Fo $<
 
 $(TARGET): $(C_OBJS)

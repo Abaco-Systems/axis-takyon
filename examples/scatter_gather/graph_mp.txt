@@ -1,18 +1,16 @@
-App: Scatter and Gather
-
-Tasks
-Task: master
-  ThreadIds: 0
-Task: slaves
-  ThreadIds: 1 2 3 4
+ThreadGroups
+ThreadGroup: master
+  Instances: 1
+ThreadGroup: slaves
+  Instances: 4
 
 Processes
 Process: 0
-  ThreadIds: 0
+  Threads: master[0]
 Process: 1
-  ThreadIds: 1 2
+  Threads: slaves[0] slaves[1]
 Process: 2
-  ThreadIds: 3 4
+  Threads: slaves[2] slaves[3]
 
 MemoryBlocks
 MemoryBlock: scatterSrc0
@@ -36,7 +34,7 @@ MemoryBlock: gatherDest1
 Paths
 Defaults
   IsPolling: false, false
-  AbortOnFailure: false, false
+  AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
   CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
@@ -52,25 +50,25 @@ Defaults
   SenderAddrList: NULL NULL, NULL NULL
   RecverAddrList: NULL NULL, NULL NULL
 Path: 0
-  ThreadId: 0, 1
+  Thread: master[0], slaves[0]
   InterconnectA: Mmap -ID 1 -app_alloced_recv_mmap
   InterconnectB: Mmap -ID 1 -remote_mmap_prefix gatherDest
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 1
-  ThreadId: 0, 2
+  Thread: master[0], slaves[1]
   InterconnectA: Socket -local -ID 2
   InterconnectB: Socket -local -ID 2
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 2
-  ThreadId: 0, 3
+  Thread: master[0], slaves[2]
   InterconnectA: Mmap -ID 2 -app_alloced_recv_mmap
   InterconnectB: Mmap -ID 2 -remote_mmap_prefix gatherDest
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 3
-  ThreadId: 0, 4
+  Thread: master[0], slaves[3]
   InterconnectA: Socket -local -ID 4
   InterconnectB: Socket -local -ID 4
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL

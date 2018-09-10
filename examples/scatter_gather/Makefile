@@ -12,11 +12,11 @@
 
 APP_NAME       := scatter_gather
 COMMON_FLAGS   := -std=gnu99 -Wall -Werror -pthread
-COMMON_FLAGS   += -g -O0
-#COMMON_FLAGS   += -O2
-CFLAGS         := $(COMMON_FLAGS) -I../../API/inc -I../../utils
+#COMMON_FLAGS   += -g -O0
+COMMON_FLAGS   += -O2
+CFLAGS         := $(COMMON_FLAGS) -I../../API/inc -I../../extensions
 LDFLAGS        := $(COMMON_FLAGS) -rdynamic
-C_OBJS         := main.o scatter_gather.o takyon_dataflow.o takyon_attributes.o takyon_collective.o takyon_mmap.o
+C_OBJS         := main.o scatter_gather.o takyon_graph.o takyon_attributes.o takyon_collective.o takyon_mmap.o
 TARGET         := $(APP_NAME)
 
 ifeq ($(OS),Windows_NT)
@@ -31,11 +31,11 @@ else
     endif
 endif
 
-# Run with valgrind: valgrind -v --leak-check=yes ./scatter_gather 0 dataflow_mt.txt
-# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./scatter_gather 0 dataflow_mt.txt
+# Run with valgrind: valgrind -v --leak-check=yes ./scatter_gather 0 graph_mt.txt
+# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./scatter_gather 0 graph_mt.txt
 
 vpath %.c .
-vpath %.c ../../utils
+vpath %.c ../../extensions
 
 all: $(TARGET)
 

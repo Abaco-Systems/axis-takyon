@@ -1,11 +1,20 @@
-// This file contains the core algorithm
+// Copyright 2018 Abaco Systems
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//     http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#include "takyon_utils.h"
+#include "takyon_extensions.h"
 #include "hello.h"
 
-void helloTask(TakyonDataflow *dataflow, ThreadDesc *thread_desc) {
-  PathDesc *path_desc = &dataflow->path_list[0];
-  TakyonPath *path = (thread_desc->id == path_desc->thread_idA) ? path_desc->pathA : path_desc->pathB;
+void helloTask(TakyonGraph *graph, TakyonThread *thread_info) {
+  TakyonConnection *connection = &graph->path_list[0];
+  TakyonPath *path = (thread_info->id == connection->thread_idA) ? connection->pathA : connection->pathB;
   bool is_endpointA = path->attrs.is_endpointA;
   const char *message = is_endpointA ? "Hello from endpoint A" : "Hello from endpoint B";
   for (int i=0; i<5; i++) {

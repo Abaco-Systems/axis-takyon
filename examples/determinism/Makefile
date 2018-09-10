@@ -14,7 +14,7 @@ APP_NAME       := determinism
 COMMON_FLAGS   := -std=gnu99 -Wall -Werror -pthread
 #COMMON_FLAGS   += -g -O0
 COMMON_FLAGS   += -O2
-CFLAGS         := $(COMMON_FLAGS) -I../../API/inc -I../../utils
+CFLAGS         := $(COMMON_FLAGS) -I../../API/inc -I../../extensions
 LDFLAGS        := $(COMMON_FLAGS) -rdynamic
 C_OBJS         := determinism.o takyon_time.o takyon_attributes.o
 TARGET         := $(APP_NAME)
@@ -35,7 +35,7 @@ endif
 # Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./determinism "Memcpy -ID 0" -mt
 
 vpath %.c .
-vpath %.c ../../utils
+vpath %.c ../../extensions
 
 all: $(TARGET)
 

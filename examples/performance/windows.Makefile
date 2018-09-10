@@ -12,7 +12,7 @@
 
 TARGET       = performance.exe
 C_OBJS       = performance.obj takyon_time.obj takyon_attributes.obj
-CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../utils
+CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../extensions
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
 LIBS         = ../../API/builds/windows_intel_64bit/Takyon.lib Ws2_32.lib
 
@@ -23,7 +23,7 @@ all: $(TARGET)
 {.\}.c{}.obj::
 	cl -c $(CFLAGS) -Fo $<
 
-{..\..\utils\}.c{}.obj::
+{..\..\extensions\}.c{}.obj::
 	cl -c $(CFLAGS) -Fo $<
 
 $(TARGET): $(C_OBJS)

@@ -10,29 +10,14 @@
 // limitations under the License.
 
 #include "takyon_extensions.h"
-#include "scatter_gather.h"
+#include "hello.h"
 
-static int L_ncycles = 100;
 static TakyonGraph *L_graph = NULL;
 
 static void *thread_entry_function(void *user_data) {
   TakyonThread *thread_info = (TakyonThread *)user_data;
-  TakyonThreadGroup *thread_group = takyonGetThreadGroup(L_graph, thread_info->id);
-
-  // Create Takyon paths
   takyonCreateGraphPaths(L_graph, thread_info->id);
-
-  // Run correct thread
-  if (strcmp(thread_group->name, "master")==0) {
-    masterTask(L_graph, thread_info, L_ncycles);
-  } else if (strcmp(thread_group->name, "slaves")==0) {
-    slaveTask(L_graph, thread_info, L_ncycles);
-  } else {
-    printf("Could not find correct task to run in thread\n");
-    exit(EXIT_FAILURE);
-  }
-
-  // Destroy Takyon paths
+  helloTask(L_graph, thread_info);
   takyonDestroyGraphPaths(L_graph, thread_info->id);
   return NULL;
 }
@@ -60,50 +45,27 @@ void appFreeMemory(const char *where, void *user_data, void *addr) {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 3) {
-    printf("Usage: %s <process_id> <graph_filename> [options]\n", argv[0]);
-    printf("  Options:\n");
-    printf("    -ncycles <N>       Number of cycles to process the data. Default is %d\n", L_ncycles);
+  if (argc != 3) {
+    printf("Usage: %s <process_id> <graph_filename>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
-
-  // Get args
-  int index = 3;
-  while (index < argc) {
-    if (strcmp(argv[index], "-ncycles") == 0) {
-      index++;
-      L_ncycles = atoi(argv[index]);
-    }
-    index++;
-  }
-  printf("ncycles = %d\n", L_ncycles);
-
   // Load graph and create any memory blocks
   int process_id = atoi(argv[1]);
   const char *filename = argv[2];
   printf("Loading graph description '%s'...\n", filename);
   L_graph = takyonLoadGraphDescription(process_id, filename);
   takyonPrintGraph(L_graph);
-  if (process_id >= L_graph->process_count) {
-    printf("ERROR: No threads defined for this process id = %d\n", process_id);
-    exit(EXIT_FAILURE);
-  }
-
   // Start the threads
-  printf("Starting threads...\n");
   for (int i=0; i<L_graph->process_list[process_id].thread_count; i++) {
     TakyonThread *thread_info = &L_graph->process_list[process_id].thread_list[i];
     pthread_create(&thread_info->thread_handle, NULL, thread_entry_function, thread_info);
   }
-
   // Wait for the threads to complete
   for (int i=0; i<L_graph->process_list[process_id].thread_count; i++) {
     TakyonThread *thread_info = &L_graph->process_list[process_id].thread_list[i];
     pthread_join(thread_info->thread_handle, NULL);
   }
-
   // Free the graph resources
   takyonFreeGraphDescription(L_graph, process_id);
-  printf("Completed %d scatter gather cycles successfully!\n", L_ncycles);
   return 0;
 }

@@ -1,19 +1,19 @@
-App: Hello World
-
-Tasks
-Task: Hello
-  ThreadIds: 0 1
+ThreadGroups
+ThreadGroup: Hello
+  Instances: 2
 
 Processes
 Process: 0
-  ThreadIds: 0 1
+  Threads: Hello[0]
+Process: 1
+  Threads: Hello[1]
 
 MemoryBlocks
 
 Paths
 Defaults
   IsPolling: false, false
-  AbortOnFailure: false, false
+  AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
   CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
@@ -29,8 +29,12 @@ Defaults
   SenderAddrList: NULL, NULL
   RecverAddrList: NULL, NULL
 Path: 0
-  ThreadId: 0, 1
-  InterconnectA: Memcpy -ID 1
-  InterconnectB: Memcpy -ID 1
+  Thread: Hello[0], Hello[1]
+  InterconnectA: Mmap -ID 1
+  InterconnectB: Mmap -ID 1
+#  InterconnectA: Socket -local -ID 1
+#  InterconnectB: Socket -local -ID 1
+#  InterconnectA: Socket -remoteIP 127.0.0.1 -port 12345
+#  InterconnectB: Socket -localIP 127.0.0.1 -port 12345
 
 CollectiveGroups

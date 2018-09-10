@@ -10,7 +10,7 @@
 // limitations under the License.
 
 #include "takyon.h"
-#include "takyon_utils.h"
+#include "takyon_extensions.h"
 
 static bool     L_is_endpointA       = false;
 static bool     L_validate_data      = false;

@@ -1,0 +1,49 @@
+ThreadGroups
+ThreadGroup: pipe
+  Instances: 5
+
+Processes
+Process: 0
+  Threads: pipe[0] pipe[1] pipe[2] pipe[3] pipe[4]
+
+MemoryBlocks
+
+Paths
+Defaults
+  IsPolling: false, false
+  AbortOnFailure: true, true
+  Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
+  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  NBufsAtoB: 2, 2
+  NBufsBtoA: 1, 1
+  SenderMaxBytesList: 100000 100000, 0
+  RecverMaxBytesList: 0, 100000 100000
+  SenderAddrList: NULL NULL, NULL
+  RecverAddrList: NULL, NULL NULL
+Path: 0
+  Thread: pipe[0], pipe[1]
+  InterconnectA: Memcpy -ID 1
+  InterconnectB: Memcpy -ID 1
+Path: 1
+  Thread: pipe[1], pipe[2]
+  InterconnectA: Memcpy -ID 2
+  InterconnectB: Memcpy -ID 2
+Path: 2
+  Thread: pipe[2], pipe[3]
+  InterconnectA: Memcpy -ID 3
+  InterconnectB: Memcpy -ID 3
+Path: 3
+  Thread: pipe[3], pipe[4]
+  InterconnectA: Memcpy -ID 4
+  InterconnectB: Memcpy -ID 4
+
+CollectiveGroups
+CollectiveGroup: pipeline
+  Type: ONE2ONE
+  PathSrcIds: 0:A 1:A 2:A 3:A
