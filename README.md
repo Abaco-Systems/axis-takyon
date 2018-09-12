@@ -13,10 +13,30 @@
   limitations under the License.
 
 ## About
-Takyon is a high level, high speed, portable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the embedded HPC industry, with no intention to compete with MPI which is focused on the HPC industry. Like MPI, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API. This is to provide an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application).
+Takyon is a high level, high speed, portable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the embedded HPC industry, with no intention to compete with MPI which is focused on the HPC industry. Like MPI, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API. This is to provide an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application). Here's a hello world example that could work with any interconnect and any locality:
+```
+// Sender
+TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -remoteIP 192.168.35.23 -port 12345");
+TakyonPath *path = takyonCreate(&attrs);
+char *data_addr = (char *)path->attrs.sender_addr_list[buffer];
+uint64_t nbytes = 1 + (uint64_t)sprintf(data_addr, "%s", "Hello World!");
+takyonSend(path, buffer, nbytes, 0/*soffset*/, 0/*doffset*/, NULL/*&timed_out*/);
+takyonDestroy(&path);
 
-Takyon's mission statement: "<b>The flexibility and performance of low level. The simplicity of high level.</b>" 
+// Receiver
+TakyonPathAttributes attrs = takyonAllocAttributes(!is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -localIP Any -port 12345");
+TakyonPath *path = takyonCreate(&attrs);
+takyonRecv(path, buffer, NULL/*&bytes_received*/, NULL/*&offset*/, NULL/*&timed_out*/);
+char *data_addr = (char *)(path->attrs.recver_addr_list[buffer] + offset);
+printf("Message from sender: %s\n", data_addr);
+takyonDestroy(&path);
+```
+To change to a different locality/interconnect, just modify "Socket ..." with any supported interconnect.
 
+### Mission Statement
+The flexibility and performance of low level. The simplicity of high level.
+
+### Documentation
 For all the great details on Takyon, read the following PDFs in Takyon's `docs/` folder:
 - Takyon Reference Sheet.pdf - All the details at a quick glance.
 - Takyon Users Guide.pdf     - In depth details of the design and how to use the API.
