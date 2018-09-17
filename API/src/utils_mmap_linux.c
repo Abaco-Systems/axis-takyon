@@ -92,8 +92,8 @@ bool mmapAlloc(const char *map_name, uint64_t bytes, void **addr_ret, MmapHandle
   /* Get a handle to mapped memory */
   mapped_addr = mmap(NULL/*addr*/, bytes, PROT_READ | PROT_WRITE, MAP_SHARED /* | MAP_HASSEMAPHORE */, mapping_fd, 0/*offset*/);
   if (mapped_addr == (void *)-1)  {
+    TAKYON_RECORD_ERROR(error_message, "could not obtain mapped address for '%s': errno=%d\n", full_map_name, errno);
     close(mapping_fd);
-    TAKYON_RECORD_ERROR(error_message, "could not obtain mapped address for '%s'\n", full_map_name);
     return false;
   }
 

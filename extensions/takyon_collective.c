@@ -11,17 +11,122 @@
 
 #include "takyon_extensions.h"
 
-TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, TakyonPath **src_path_list, TakyonPath **dest_path_list) {
+TakyonCollectiveBarrier *takyonBarrierInit(int nchildren, TakyonPath *parent_path, TakyonPath **child_path_list) {
+  if (nchildren < 0) {
+    fprintf(stderr, "%s(): npaths must be >= zero\n", __FUNCTION__);
+    exit(EXIT_FAILURE);
+  }
+  if ((nchildren > 0) && (child_path_list == NULL)) {
+    fprintf(stderr, "%s(): child_path_list is NULL but nchildren is %d\n", __FUNCTION__, nchildren);
+    exit(EXIT_FAILURE);
+  }
+  if ((nchildren == 0) && (child_path_list != NULL)) {
+    fprintf(stderr, "%s(): child_path_list is not NULL but nchildren is %d\n", __FUNCTION__, nchildren);
+    exit(EXIT_FAILURE);
+  }
+  TakyonCollectiveBarrier *collective = (TakyonCollectiveBarrier *)calloc(1, sizeof(TakyonCollectiveBarrier));
+  if (collective == NULL) {
+    fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
+    exit(EXIT_FAILURE);
+  }
+  collective->parent_path = parent_path;
+  collective->nchildren = nchildren;
+  if (nchildren > 0) {
+    collective->child_path_list = (TakyonPath **)calloc(nchildren, sizeof(TakyonPath *));
+    if (collective->child_path_list == NULL) {
+      fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    for (int i=0; i<nchildren; i++) {
+      if (child_path_list[i] == NULL) {
+        fprintf(stderr, "%s(): child_path_list[%d] is NULL\n", __FUNCTION__, i);
+        exit(EXIT_FAILURE);
+      }
+      collective->child_path_list[i] = child_path_list[i];
+    }
+  }
+  return collective;
+}
+
+void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
+  bool timed_out;
+  bool ok;
+
+  // NOTE: This is a tree based barrier.
+  // Signalling starts at the top of the tree and works it way down to the leaves.
+  // Once all the leaves get the signal, then it works its way back to the top of the tree.
+  // This is a log(N) barrier, where the base of the log() is the number of children per node.
+
+  // If parent exists, wait for a signal
+  if (collective->parent_path != NULL) {
+    ok = takyonRecv(collective->parent_path, buffer, NULL, NULL, &timed_out);
+    if (ok && timed_out) {
+      fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    if (!ok) {
+      fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->parent_path->attrs.error_message);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  // If have children, send a signal, then wait for a response
+  for (int i=0; i<collective->nchildren; i++) {
+    // Send signal
+    ok = takyonSend(collective->child_path_list[i], buffer, 0, 0, 0, &timed_out);
+    if (ok && timed_out) {
+      fprintf(stderr, "%s(): path index %d timed out.\n", __FUNCTION__, i);
+      exit(EXIT_FAILURE);
+    }
+    if (!ok) {
+      fprintf(stderr, "%s(): path index %d failed with error:\n%s\n", __FUNCTION__, i, collective->child_path_list[i]->attrs.error_message);
+      exit(EXIT_FAILURE);
+    }
+  }
+  for (int i=0; i<collective->nchildren; i++) {
+    // Wait for response
+    ok = takyonRecv(collective->child_path_list[i], buffer, NULL, NULL, &timed_out);
+    if (ok && timed_out) {
+      fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    if (!ok) {
+      fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->child_path_list[i]->attrs.error_message);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  // If parent exists, send a response
+  if (collective->parent_path != NULL) {
+    // Send signal
+    ok = takyonSend(collective->parent_path, buffer, 0, 0, 0, &timed_out);
+    if (ok && timed_out) {
+      fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    if (!ok) {
+      fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->parent_path->attrs.error_message);
+      exit(EXIT_FAILURE);
+    }
+  }
+}
+
+void takyonBarrierFinalize(TakyonCollectiveBarrier *collective) {
+  free(collective->child_path_list);
+  free(collective);
+}
+
+TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, int num_src_paths, int num_dest_paths, TakyonPath **src_path_list, TakyonPath **dest_path_list) {
   if (npaths <= 0) {
     fprintf(stderr, "%s(): npaths must be greater than zero\n", __FUNCTION__);
     exit(EXIT_FAILURE);
   }
-  if (src_path_list == NULL) {
-    fprintf(stderr, "%s(): src_path_list is NULL\n", __FUNCTION__);
+  if ((num_src_paths > 0) && (src_path_list == NULL)) {
+    fprintf(stderr, "%s(): src_path_list is NULL, but num_src_paths=%d\n", __FUNCTION__, num_src_paths);
     exit(EXIT_FAILURE);
   }
-  if (dest_path_list == NULL) {
-    fprintf(stderr, "%s(): dest_path_list is NULL\n", __FUNCTION__);
+  if ((num_dest_paths > 0) && (dest_path_list == NULL)) {
+    fprintf(stderr, "%s(): dest_path_list is NULL, but num_dest_paths=%d\n", __FUNCTION__, num_dest_paths);
     exit(EXIT_FAILURE);
   }
   TakyonCollectiveOne2One *collective = (TakyonCollectiveOne2One *)calloc(1, sizeof(TakyonCollectiveOne2One));
@@ -29,19 +134,21 @@ TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, TakyonPath **src_path_lis
     fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
     exit(EXIT_FAILURE);
   }
-  collective->src_path_list = (TakyonPath **)calloc(npaths, sizeof(TakyonPath *));
+  collective->src_path_list = (TakyonPath **)calloc(num_src_paths, sizeof(TakyonPath *));
   if (collective->src_path_list == NULL) {
     fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
     exit(EXIT_FAILURE);
   }
-  collective->dest_path_list = (TakyonPath **)calloc(npaths, sizeof(TakyonPath *));
+  collective->dest_path_list = (TakyonPath **)calloc(num_dest_paths, sizeof(TakyonPath *));
   if (collective->dest_path_list == NULL) {
     fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
     exit(EXIT_FAILURE);
   }
   collective->npaths = npaths;
-  for (int i=0; i<npaths; i++) {
+  for (int i=0; i<num_src_paths; i++) {
     collective->src_path_list[i] = src_path_list[i];
+  }
+  for (int i=0; i<num_dest_paths; i++) {
     collective->dest_path_list[i] = dest_path_list[i];
   }
   return collective;

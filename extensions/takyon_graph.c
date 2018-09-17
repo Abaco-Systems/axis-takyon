@@ -219,6 +219,7 @@ static TakyonCollectiveGroup *takyonGetCollective(TakyonGraph *graph, const char
 
 static const char *collectiveTypeToName(TakyonCollectiveType type) {
   if (type == TAKYON_COLLECTIVE_ONE2ONE) return "ONE2ONE";
+  if (type == TAKYON_COLLECTIVE_BARRIER) return "BARRIER";
   if (type == TAKYON_COLLECTIVE_SCATTER) return "SCATTER";
   if (type == TAKYON_COLLECTIVE_GATHER) return "GATHER";
   return "Unknown";
@@ -408,6 +409,101 @@ static void getCollectivePathList(TakyonGraph *graph, char *data, int *count_ret
   *collective_path_list_ret = collective_path_list;
 }
 
+static void validateTreeChildren(TakyonPathTree *current_path_tree, TakyonCollectiveConnection *path_list, TakyonGraph *graph, int line_count) {
+  // Verify all children sources are the same thread ID
+  int path_index1 = current_path_tree->children[0].path_index;
+  TakyonCollectiveConnection *path1 = &path_list[path_index1];
+  int path_id1 = path1->path_id;
+  TakyonConnection *connection1 = &graph->path_list[path_id1];
+  int thread_id1 = path1->src_is_endpointA ? connection1->thread_idA : connection1->thread_idB;
+  for (int i=1; i<current_path_tree->num_children; i++) {
+    int path_index2 = current_path_tree->children[i].path_index;
+    TakyonCollectiveConnection *path2 = &path_list[path_index2];
+    int path_id2 = path2->path_id;
+    TakyonConnection *connection2 = &graph->path_list[path_id2];
+    int thread_id2 = path2->src_is_endpointA ? connection2->thread_idA : connection2->thread_idB;
+    if (thread_id2 != thread_id1) {
+      fprintf(stderr, "Line %d: The path tree has siblings that do not have the same source thread\n", line_count);
+      exit(EXIT_FAILURE);
+    }
+  }
+}
+
+static void getCollectivePathTree(TakyonGraph *graph, char *data, int *count_ret, TakyonCollectiveConnection **collective_path_list_ret, TakyonPathTree **path_tree_ret, int line_count) {
+  static char keyword[MAX_KEYWORD_BYTES];
+  static char value[MAX_VALUE_BYTES];
+  int count = 0;
+  TakyonCollectiveConnection *collective_path_list = NULL;
+  TakyonPathTree *top_path_tree = calloc(1, sizeof(TakyonPathTree));
+  validateAllocation(top_path_tree, __FUNCTION__);
+  TakyonPathTree *current_path_tree = top_path_tree;
+  while (data != NULL) {
+    data = getNextKeyValue(data, keyword, value, &line_count);
+    if (data != NULL) {
+      if (strcmp(keyword, "(")== 0) {
+        // New tree level
+        if (current_path_tree->num_children == 0) {
+          fprintf(stderr, "Line %d: The format for the node tree should NOT start with '(' or have multiple '(' in a row.\n", line_count);
+          exit(EXIT_FAILURE);
+        }
+        current_path_tree = &current_path_tree->children[current_path_tree->num_children-1];
+      } else if (strcmp(keyword, ")")== 0) {
+        // Reverse up the tree
+        if (current_path_tree->num_children == 0) {
+          fprintf(stderr, "Line %d: The format for the node tree should NOT contain '( )' with no contents.\n", line_count);
+          exit(EXIT_FAILURE);
+        }
+        validateTreeChildren(current_path_tree, collective_path_list, graph, line_count);
+        if (current_path_tree->parent == NULL) {
+          fprintf(stderr, "Line %d: The format for the node tree contains too many ')'.\n", line_count);
+          exit(EXIT_FAILURE);
+        }
+        current_path_tree = current_path_tree->parent;
+      } else {
+        int path_id;
+        char endpoint;
+        int tokens = sscanf(keyword, "%d:%c", &path_id, &endpoint);
+        if ((tokens != 2) || (path_id < 0) || (endpoint != 'A' && endpoint != 'B')) {
+          fprintf(stderr, "Line %d: The format for each should should be '<path_id>:{A | B}', but got value '%s'\n", line_count, keyword);
+          exit(EXIT_FAILURE);
+        }
+        TakyonConnection *path_desc = getPath(graph, path_id);
+        if (path_desc == NULL) {
+          fprintf(stderr, "Line %d: There is no path for path ID=%d\n", line_count, path_id);
+          exit(EXIT_FAILURE);
+        }
+        // Add path to list
+        count++;
+        collective_path_list = realloc(collective_path_list, count * sizeof(TakyonCollectiveConnection));
+        validateAllocation(collective_path_list, __FUNCTION__);
+        collective_path_list[count-1].path_id = path_id;
+        collective_path_list[count-1].src_is_endpointA = (endpoint == 'A');
+        // Add path to tree
+        current_path_tree->num_children++;
+        current_path_tree->children = realloc(current_path_tree->children, current_path_tree->num_children * sizeof(TakyonPathTree));
+        validateAllocation(current_path_tree->children, __FUNCTION__);
+        TakyonPathTree *child = &current_path_tree->children[current_path_tree->num_children-1];
+        child->path_index = count-1;
+        child->num_children = 0;
+        child->children = NULL;
+        child->parent = current_path_tree;
+      }
+      strcpy(data, value);
+    }
+  }
+
+  // Do some last error checking
+  if (current_path_tree != top_path_tree) {
+    fprintf(stderr, "Line %d: The tree list has unbalanced parenthesis\n", line_count);
+    exit(EXIT_FAILURE);
+  }
+  validateTreeChildren(top_path_tree, collective_path_list, graph, line_count);
+
+  *count_ret = count;
+  *collective_path_list_ret = collective_path_list;
+  *path_tree_ret = top_path_tree;
+}
+
 static void getUInt64List(char *data, int *count_ret, uint64_t **uint64_list_ret, int line_count) {
   static char keyword[MAX_KEYWORD_BYTES];
   static char value[MAX_VALUE_BYTES];
@@ -454,7 +550,7 @@ static int getThreadIdFromInstance(TakyonGraph *graph, char *data, int line_coun
     fprintf(stderr, "Line %d: The thread group with name='%s' was not defined in the 'ThreadGroups' section.\n", line_count, thread_name);
     exit(EXIT_FAILURE);
   }
-  if (thread_index < 0 && thread_index >= thread_group_desc->instances) {
+  if (thread_index < 0 || thread_index >= thread_group_desc->instances) {
     fprintf(stderr, "Line %d: The thread '%s' referneces an index that is out of range: max index allowed is %d\n", line_count, data, thread_group_desc->instances-1);
     exit(EXIT_FAILURE);
   }
@@ -745,6 +841,7 @@ static char *parseMemoryBlocks(int my_process_id, TakyonGraph *graph, char *data
 
 static TakyonCollectiveType getCollectiveTypeFromText(const char *value, int line_count) {
   if (strcmp(value, "ONE2ONE") == 0) return TAKYON_COLLECTIVE_ONE2ONE;
+  if (strcmp(value, "BARRIER") == 0) return TAKYON_COLLECTIVE_BARRIER;
   if (strcmp(value, "SCATTER") == 0) return TAKYON_COLLECTIVE_SCATTER;
   if (strcmp(value, "GATHER") == 0) return TAKYON_COLLECTIVE_GATHER;
   fprintf(stderr, "Line %d: The name '%s' is not a valid collective type.\n", line_count, value);
@@ -780,7 +877,11 @@ static char *parseCollectiveGroups(TakyonGraph *graph, char *data_ptr, char *key
     // Get path list: <path_id>:{A | B}
     data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
     validateKeyValue("PathSrcIds:", data_ptr, keyword, value, line_count);
-    getCollectivePathList(graph, value, &collective_desc->num_paths, &collective_desc->path_list, line_count);
+    if (collective_desc->type == TAKYON_COLLECTIVE_BARRIER) {
+      getCollectivePathTree(graph, value, &collective_desc->num_paths, &collective_desc->path_list, &collective_desc->path_tree, line_count);
+    } else {
+      getCollectivePathList(graph, value, &collective_desc->num_paths, &collective_desc->path_list, line_count);
+    }
 
     // Verify all paths are unique
     for (int i=0; i<collective_desc->num_paths; i++) {
@@ -797,6 +898,11 @@ static char *parseCollectiveGroups(TakyonGraph *graph, char *data_ptr, char *key
     // Validate collective connectivity
     if (collective_desc->type == TAKYON_COLLECTIVE_ONE2ONE) {
       // Nothing extra to validate
+    } else if (collective_desc->type == TAKYON_COLLECTIVE_BARRIER) {
+      // NOTES:
+      //   Input format guarantees a propert tree structure
+      //   Above code guarantees no duplicated paths, which means no cyclic dependencies.
+      //   Parsing code guarantees proper tree connections with no un balanced structure
     } else if (collective_desc->type == TAKYON_COLLECTIVE_SCATTER) {
       // Make sure all scatter sources are the same
       TakyonCollectiveConnection *first_coll_path = &collective_desc->path_list[0];
@@ -983,8 +1089,13 @@ static void updateParam(TakyonGraph *graph, PathParam *param, char *value, int l
     param->boolB = getBoolValue(valueB, line_count);
   } else if (param->type == PARAM_TYPE_THREAD_INSTANCE) {
     // Format is <thread_group_name>[index]
-    param->intA = getThreadIdFromInstance(graph, valueA, line_count);
-    param->intB = getThreadIdFromInstance(graph, valueB, line_count);
+    if ((param->intA == -1) && (param->intB == -1)) {
+      param->intA = getThreadIdFromInstance(graph, valueA, line_count);
+      param->intB = getThreadIdFromInstance(graph, valueB, line_count);
+    } else {
+      fprintf(stderr, "Line %d: The path's threads have already been set.\n", line_count);
+      exit(EXIT_FAILURE);
+    }
   } else if (param->type == PARAM_TYPE_INT) {
     param->intA = getIntValue(valueA, line_count, 0);
     param->intB = getIntValue(valueB, line_count, 0);
@@ -1199,29 +1310,38 @@ static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char 
         validateUniqueInt(path_desc->id, graph->path_list[j].id, line_count);
       }
 
-      /*+ require Thread: and InterconnectA:, and InterconnectB: before other things */
-      // Path attributes
+      // Set path attribute defaults
       PathParam path_params[NUM_PATH_PARAMS];
       memset(path_params, 0, NUM_PATH_PARAMS*sizeof(PathParam));
-      static char interconnectA[MAX_TAKYON_INTERCONNECT_CHARS];
-      static char interconnectB[MAX_TAKYON_INTERCONNECT_CHARS];
       copyParams(path_params, default_params, NUM_DEFAULT_PARAMS);
       setParamDefaultValueThreadInstance(&path_params[NUM_DEFAULT_PARAMS], "Thread:", -1);
+
+      // Thread
+      data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
+      validateKeyValue("Thread:", data_ptr, keyword, value, line_count);
+      int param_index = getParamIndex(keyword, path_params, NUM_PATH_PARAMS);
+      updateParam(graph, &path_params[param_index], value, line_count);
+
+      // InterconnectA
+      static char interconnectA[MAX_TAKYON_INTERCONNECT_CHARS];
       interconnectA[0] = '\0';
+      data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
+      validateKeyValue("InterconnectA:", data_ptr, keyword, value, line_count);
+      strncpy(interconnectA, value, MAX_TAKYON_INTERCONNECT_CHARS);
+
+      // InterconnectB
+      static char interconnectB[MAX_TAKYON_INTERCONNECT_CHARS];
       interconnectB[0] = '\0';
+      data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
+      validateKeyValue("InterconnectB:", data_ptr, keyword, value, line_count);
+      strncpy(interconnectB, value, MAX_TAKYON_INTERCONNECT_CHARS);
 
       // Get path attributes
       data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
-      int param_index = getParamIndex(keyword, path_params, NUM_PATH_PARAMS);
-      while ((param_index >= 0) || (strcmp(keyword,"InterconnectA:")==0) || (strcmp(keyword,"InterconnectB:")==0)) {
-        if (param_index >= 0) {
-          // Update path params
-          updateParam(graph, &path_params[param_index], value, line_count);
-        } else if (strcmp(keyword,"InterconnectA:")==0) {
-          strncpy(interconnectA, value, MAX_TAKYON_INTERCONNECT_CHARS);
-        } else if (strcmp(keyword,"InterconnectB:")==0) {
-          strncpy(interconnectB, value, MAX_TAKYON_INTERCONNECT_CHARS);
-        }
+      param_index = getParamIndex(keyword, path_params, NUM_PATH_PARAMS);
+      while (param_index >= 0) {
+        // Update path params
+        updateParam(graph, &path_params[param_index], value, line_count);
         // Get next line
         data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
         param_index = getParamIndex(keyword, path_params, NUM_PATH_PARAMS);
@@ -1325,14 +1445,10 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
   // Thread Groups
   data_ptr = parseThreadGroups(graph, data_ptr, keyword, value, &line_count);
 #ifdef DEBUG_MESSAGE
-  printf("ThreadGroups = %d\n", graph->thread_group_count);
+  printf("Threads:\n");
   for (int i=0; i<graph->thread_group_count; i++) {
     TakyonThreadGroup *thread_group_desc = &graph->thread_group_list[i];
-    printf("  %s:", thread_group_desc->name);
-    for (int j=0; j<thread_group_desc->thread_count; j++) {
-      printf(" %d", thread_group_desc->thread_id_list[j]);
-    }
-    printf("\n");
+    printf("  %s: instances=%d\n", thread_group_desc->name, thread_group_desc->instances);
   }
 #endif
 
@@ -1341,17 +1457,19 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
   // MemoryBlocks (get mapped to a process)
   data_ptr = parseMemoryBlocks(process_id, graph, data_ptr, keyword, value, &line_count);
 #ifdef DEBUG_MESSAGE
-  printf("Processes = %d\n", graph->process_count);
+  printf("Processes:\n");
   for (int i=0; i<graph->process_count; i++) {
     TakyonProcess *process_desc = &graph->process_list[i];
-    printf("  %d:", process_desc->id);
+    printf("  Process %d: Threads:", process_desc->id);
     for (int j=0; j<process_desc->thread_count; j++) {
-      printf(" %d", process_desc->thread_list[j].id);
+      TakyonThreadGroup *thread_group_desc = takyonGetThreadGroup(graph, process_desc->thread_list[j].id);
+      int instance = process_desc->thread_list[j].id - thread_group_desc->starting_thread_id;
+      printf(" %s[%d]", thread_group_desc->name, instance);
     }
     printf("\n");
     for (int j=0; j<process_desc->memory_block_count; j++) {
       TakyonMemoryBlock *memory_block = &process_desc->memory_block_list[j];
-      printf("    MemBlock %d: where='%s', bytes=%lld, addr=0x%llx\n", memory_block->id, memory_block->where, (unsigned long long)memory_block->bytes, (unsigned long long)memory_block->addr);
+      printf("    MemBlock '%s': where='%s', bytes=%lld, addr=0x%llx\n", memory_block->name, memory_block->where, (unsigned long long)memory_block->bytes, (unsigned long long)memory_block->addr);
     }
   }
 #endif
@@ -1362,7 +1480,11 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
   printf("Paths = %d\n", graph->path_count);
   for (int i=0; i<graph->path_count; i++) {
     TakyonConnection *path_desc = &graph->path_list[i];
-    printf("  Path=%d: ThreadA=%d, ThreadB=%d\n", path_desc->id, path_desc->thread_idA, path_desc->thread_idB);
+    TakyonThreadGroup *thread_group_descA = takyonGetThreadGroup(graph, path_desc->thread_idA);
+    int instanceA = path_desc->thread_idA - thread_group_descA->starting_thread_id;
+    TakyonThreadGroup *thread_group_descB = takyonGetThreadGroup(graph, path_desc->thread_idB);
+    int instanceB = path_desc->thread_idB - thread_group_descB->starting_thread_id;
+    printf("  Path=%d: ThreadA=%d=%s[%d], ThreadB=%d=%s[%d]\n", path_desc->id, path_desc->thread_idA, thread_group_descA->name, instanceA, path_desc->thread_idB, thread_group_descB->name, instanceB);
 
     // Endpoint A
     printf("    Endpoint A Attributes:\n");
@@ -1466,6 +1588,15 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
   return graph;
 }
 
+static void freePathTree(TakyonPathTree *path_tree) {
+  for (int i=0; i<path_tree->num_children; i++) {
+    TakyonPathTree *child = &path_tree->children[i];
+    freePathTree(child);
+  }
+  if (path_tree->children != NULL) free(path_tree->children);
+  if (path_tree->parent == NULL) free(path_tree);
+}
+
 void takyonFreeGraphDescription(TakyonGraph *graph, int my_process_id) {
   for (int i=0; i<graph->thread_group_count; i++) {
     free(graph->thread_group_list[i].name);
@@ -1500,6 +1631,7 @@ void takyonFreeGraphDescription(TakyonGraph *graph, int my_process_id) {
     TakyonCollectiveGroup *collective = &graph->collective_list[i];
     free(collective->name);
     free(collective->path_list);
+    if (collective->path_tree != NULL) freePathTree(collective->path_tree);
   }
   if (graph->collective_count > 0) free(graph->collective_list);
 
@@ -1549,27 +1681,101 @@ void takyonDestroyGraphPaths(TakyonGraph *graph, int thread_id) {
   }
 }
 
-TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, int thread_id) {
-  TakyonCollectiveOne2One *collective = NULL;
+TakyonCollectiveBarrier *takyonGetBarrier(TakyonGraph *graph, const char *name, int thread_id) {
+  TakyonCollectiveBarrier *collective = NULL;
   TakyonCollectiveGroup *collective_desc = takyonGetCollective(graph, name);
-  if ((collective_desc != NULL) && (collective_desc->type == TAKYON_COLLECTIVE_ONE2ONE)) {
-    TakyonPath **src_path_list = (TakyonPath **)calloc(collective_desc->num_paths, sizeof(TakyonPath *));
-    validateAllocation(src_path_list, __FUNCTION__);
-    TakyonPath **dest_path_list = (TakyonPath **)calloc(collective_desc->num_paths, sizeof(TakyonPath *));
-    validateAllocation(dest_path_list, __FUNCTION__);
+  if ((collective_desc != NULL) && (collective_desc->type == TAKYON_COLLECTIVE_BARRIER)) {
+    // Get the parent
+    TakyonPath *parent_path = NULL;
+    for (int j=0; j<collective_desc->num_paths; j++) {
+      TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+      TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idB == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idA == thread_id))) {
+        if (parent_path != NULL) {
+          TakyonThreadGroup *thread_group = takyonGetThreadGroup(graph, thread_id);
+          int instance = thread_id - thread_group->starting_thread_id;
+          fprintf(stderr, "%s(): The collective barrier '%s' has two tree nodes wth the same thread ID %s[%d]\n", __FUNCTION__, name, thread_group->name, instance);
+          exit(EXIT_FAILURE);
+        }
+        parent_path = (collective_path->src_is_endpointA) ? path_desc->pathB: path_desc->pathA;
+      }
+    }
+    // Get the number of children
+    int nchildren = 0;
     for (int j=0; j<collective_desc->num_paths; j++) {
       TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
       TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
       if ((collective_path->src_is_endpointA && (path_desc->thread_idA == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idB == thread_id))) {
-        src_path_list[j] = (collective_path->src_is_endpointA) ? path_desc->pathA: path_desc->pathB;
-      }
-      if ((collective_path->src_is_endpointA && (path_desc->thread_idB == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idA == thread_id))) {
-        dest_path_list[j] = (collective_path->src_is_endpointA) ? path_desc->pathB: path_desc->pathA;
+        nchildren++;
       }
     }
-    collective = takyonOne2OneInit(collective_desc->num_paths, src_path_list, dest_path_list);
-    free(src_path_list);
-    free(dest_path_list);
+    // Create the child list
+    TakyonPath **child_path_list = NULL;
+    int child_index = 0;
+    if (nchildren > 0) {
+      child_path_list = (TakyonPath **)calloc(nchildren, sizeof(TakyonPath *));
+      validateAllocation(child_path_list, __FUNCTION__);
+      for (int j=0; j<collective_desc->num_paths; j++) {
+        TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+        TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+        if ((collective_path->src_is_endpointA && (path_desc->thread_idA == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idB == thread_id))) {
+          child_path_list[child_index] = (collective_path->src_is_endpointA) ? path_desc->pathA: path_desc->pathB;
+          child_index++;
+        }
+      }
+    }
+    // Define collective
+    collective = takyonBarrierInit(nchildren, parent_path, child_path_list);
+    free(child_path_list);
+  }
+  return collective;
+}
+
+TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, int thread_id) {
+  TakyonCollectiveOne2One *collective = NULL;
+  TakyonCollectiveGroup *collective_desc = takyonGetCollective(graph, name);
+  if ((collective_desc != NULL) && (collective_desc->type == TAKYON_COLLECTIVE_ONE2ONE)) {
+    // Count the paths
+    int num_src_paths = 0;
+    int num_dest_paths = 0;
+    for (int j=0; j<collective_desc->num_paths; j++) {
+      TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+      TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idA == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idB == thread_id))) {
+        num_src_paths++;
+      }
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idB == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idA == thread_id))) {
+        num_dest_paths++;
+      }
+    }
+    // Record the paths
+    TakyonPath **src_path_list = NULL;
+    TakyonPath **dest_path_list = NULL;
+    if (num_src_paths > 0) {
+      src_path_list = (TakyonPath **)calloc(num_src_paths, sizeof(TakyonPath *));
+      validateAllocation(src_path_list, __FUNCTION__);
+    }
+    if (num_dest_paths > 0) {
+      dest_path_list = (TakyonPath **)calloc(num_dest_paths, sizeof(TakyonPath *));
+      validateAllocation(dest_path_list, __FUNCTION__);
+    }
+    num_src_paths = 0;
+    num_dest_paths = 0;
+    for (int j=0; j<collective_desc->num_paths; j++) {
+      TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+      TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idA == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idB == thread_id))) {
+        src_path_list[num_src_paths] = (collective_path->src_is_endpointA) ? path_desc->pathA: path_desc->pathB;
+        num_src_paths++;
+      }
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idB == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idA == thread_id))) {
+        dest_path_list[num_dest_paths] = (collective_path->src_is_endpointA) ? path_desc->pathB: path_desc->pathA;
+        num_dest_paths++;
+      }
+    }
+    collective = takyonOne2OneInit(collective_desc->num_paths, num_src_paths, num_dest_paths, src_path_list, dest_path_list);
+    if (src_path_list != NULL) free(src_path_list);
+    if (dest_path_list != NULL) free(dest_path_list);
   }
   return collective;
 }
@@ -1658,6 +1864,18 @@ TakyonGatherDest *takyonGetGatherDest(TakyonGraph *graph, const char *name, int 
   return gather_dest;
 }
 
+static void printPathTree(TakyonPathTree *tree_node, TakyonCollectiveGroup *collective_desc) {
+  if (tree_node->parent != NULL) {
+    TakyonCollectiveConnection *path = &collective_desc->path_list[tree_node->path_index];
+    printf(" %d:%s", path->path_id, path->src_is_endpointA ? "A->B" : "B->A");
+  }
+  if ((tree_node->parent != NULL) && (tree_node->num_children > 0)) printf(" (");
+  for (int i=0; i<tree_node->num_children; i++) {
+    printPathTree(&tree_node->children[i], collective_desc);
+  }
+  if ((tree_node->parent != NULL) && (tree_node->num_children > 0)) printf(" )");
+}
+
 void takyonPrintGraph(TakyonGraph *graph) {
   printf("  Threads:\n");
   for (int i=0; i<graph->thread_group_count; i++) {
@@ -1695,9 +1913,13 @@ void takyonPrintGraph(TakyonGraph *graph) {
   for (int i=0; i<graph->collective_count; i++) {
     TakyonCollectiveGroup *collective_desc = &graph->collective_list[i];
     printf("    '%s', Type=%s, Paths:", collective_desc->name, collectiveTypeToName(collective_desc->type));
-    for (int j=0; j<collective_desc->num_paths; j++) {
-      TakyonCollectiveConnection *path = &collective_desc->path_list[j];
-      printf(" %d:%s", path->path_id, path->src_is_endpointA ? "A->B" : "B->A");
+    if (collective_desc->path_tree != NULL) {
+      printPathTree(collective_desc->path_tree, collective_desc);
+    } else {
+      for (int j=0; j<collective_desc->num_paths; j++) {
+        TakyonCollectiveConnection *path = &collective_desc->path_list[j];
+        printf(" %d:%s", path->path_id, path->src_is_endpointA ? "A->B" : "B->A");
+      }
     }
     printf("\n");
   }

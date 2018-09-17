@@ -21,6 +21,7 @@ TakyonPath *path = takyonCreate(&attrs);
 char *data_addr = (char *)path->attrs.sender_addr_list[buffer];
 uint64_t nbytes = 1 + (uint64_t)sprintf(data_addr, "%s", "Hello World!");
 takyonSend(path, buffer, nbytes, 0/*soffset*/, 0/*doffset*/, NULL/*&timed_out*/);
+if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(path, buffer, NULL/*&timed_out*/);
 takyonDestroy(&path);
 
 // Receiver
@@ -213,6 +214,7 @@ These will be needed by Takyon applications:
 - performance: Calculates the latency and throughput of any supported interconnect.
 - determinism: Shows the determinism of an interconnect via multple trasfer times displayed in a histogram.
 - fault_tolerant: Shows that connections can be broken (via timeouts, cable disconnection, or control-C) then recover from the failure.
+- barrier: Uses the graph extension functions to create a pipeline and barrier collective, where the barrier is used to synchronize the pipeline processing.
 - pipeline: Uses the graph extension functions to create a long data processing path by connecting a set of Takyon paths in series.
 - scatter_gather: Uses the graph extension functions to create a collective example similar to MPI.
 - connectionless: Shows how Takyon can also be used with one sided connectionless interconnects (including multicast), such as live streaming and IO devices like GigE cameras, Lidar, analog-to-digital and digital-to-analog.

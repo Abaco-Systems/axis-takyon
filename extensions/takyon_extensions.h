@@ -9,9 +9,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Takyon's open source extensions
-
-/*+ DOC: rename to takyon open source extensions (not included with all implementations, but should be compatible will all implementations) */
+// This file defines all of the Takyon open source extensions
 
 #ifndef _takyon_extensions_h_
 #define _takyon_extensions_h_
@@ -25,7 +23,16 @@ typedef struct _TakyonMmapHandle *TakyonMmapHandle;
 // Collective structures
 //----------------------------------------------------------------
 typedef struct {
+  int nchildren;
+  TakyonPath *parent_path;
+  TakyonPath **child_path_list;
+} TakyonCollectiveBarrier;
+
+typedef struct {
   int npaths;                   // Total paths in the collective
+  /*+*/
+  int num_src_paths;
+  int num_dest_paths;
   TakyonPath **src_path_list;   // NULL is not using this thread
   TakyonPath **dest_path_list;  // NULL is not using this thread
 } TakyonCollectiveOne2One;
@@ -94,6 +101,7 @@ typedef struct {
 } TakyonConnection;
 
 typedef enum {
+  TAKYON_COLLECTIVE_BARRIER,
   TAKYON_COLLECTIVE_ONE2ONE,
   TAKYON_COLLECTIVE_SCATTER,
   TAKYON_COLLECTIVE_GATHER,
@@ -104,11 +112,19 @@ typedef struct {
   bool src_is_endpointA;
 } TakyonCollectiveConnection;
 
+typedef struct _TakyonPathTree {
+  int path_index;
+  int num_children;
+  struct _TakyonPathTree *children;
+  struct _TakyonPathTree *parent;
+} TakyonPathTree;
+
 typedef struct {
   char *name;
   TakyonCollectiveType type;
   int num_paths;
   TakyonCollectiveConnection *path_list;
+  TakyonPathTree *path_tree;
 } TakyonCollectiveGroup;
 
 typedef struct {
@@ -150,8 +166,12 @@ extern void takyonMmapAlloc(const char *map_name, uint64_t bytes, void **addr_re
 extern void takyonMmapFree(TakyonMmapHandle mmap_handle);
 
 // Collective functions
+// Barrier
+extern TakyonCollectiveBarrier *takyonBarrierInit(int nchildren, TakyonPath *parent_path, TakyonPath **child_path_list);
+extern void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer);
+extern void takyonBarrierFinalize(TakyonCollectiveBarrier *collective);
 // One2One
-extern TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, TakyonPath **src_path_list, TakyonPath **dest_path_list);
+extern TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, int num_src_paths, int num_dest_paths, TakyonPath **src_path_list, TakyonPath **dest_path_list);
 extern void takyonOne2OneFinalize(TakyonCollectiveOne2One *collective);
 // Scatter
 extern TakyonScatterSrc *takyonScatterSrcInit(int npaths, TakyonPath **path_list);
@@ -178,6 +198,7 @@ extern void takyonDestroyGraphPaths(TakyonGraph *graph, int thread_id);
 extern void takyonPrintGraph(TakyonGraph *graph);
 extern TakyonThreadGroup *takyonGetThreadGroup(TakyonGraph *graph, int thread_id);
 extern int takyonGetThreadGroupInstance(TakyonGraph *graph, int thread_id);
+extern TakyonCollectiveBarrier *takyonGetBarrier(TakyonGraph *graph, const char *name, int thread_id);
 extern TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, int thread_id);
 extern TakyonScatterSrc *takyonGetScatterSrc(TakyonGraph *graph, const char *name, int thread_id);
 extern TakyonScatterDest *takyonGetScatterDest(TakyonGraph *graph, const char *name, int thread_id);

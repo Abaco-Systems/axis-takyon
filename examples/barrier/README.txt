@@ -2,26 +2,25 @@ Description:
 ------------
   This example is designed to show how the Takyon extention functions can be used to
   organize collective communications, in this case a pipeline of paths used to create
-  one long path.
+  one long path and a tree based barrier is used to synchronize the processing of the
+  pipeline processing.
 
   This example has features to emphasize the flexibility of Takyon and its extentions:
     - simplifies how to start an app: <executable> <process_id> <graph_description_file>
     - Mixes inter-threaded with inter-process paths in a single app.
-    - Allows Takyon paths to be grouped into collective calls (e.g. a pipeline).
+    - Allows Takyon paths to be grouped into collective calls (e.g. a pipeline and barrier).
     - Adding more paths is simple, just update the graph description file, and run
       more executables if needed. No compiling is needed, which means this app
       is scalable.
 
-  The executable has one type of processing thread, but with three sections:
-    - Start of pipe: creates the initial data and sends it to the next thread.
-    - Intermediate pipe thread: receives data from the previous thread, adds one,
-      and sends it to the next thread.
-    - End of pipe: receives data from the previous thread and validates for correctness.
+  The executable has one type of processing thread:
+    1. Move data on the pipeline.
+    2. Do a barrier before moving data on the pipelien again.
 
   Source files:
     main.c - Loads the graph description file, allocates any needed memory blocks,
              and starts the appropriate threads. This is the framework for the application.
-    pipeline.c - This is the heart of the algorithm. Notice this source code is
+    barrier.c - This is the heart of the algorithm. Notice this source code is
              compleltly scalable; i.e. if more paths are added in the graph description
              file, this source code remains unaffected.
 
@@ -46,21 +45,19 @@ Run:
 ----
   Mac and Linux:
     To see all the usage options:
-      > ./pipeline
+      > ./barrier
 
     One process, multiple threads:
       Terminal 1:
-        > ./pipeline 0 graph_mt.txt
+        > ./barrier 0 graph_mt.txt
 
     All in one OS, multiple processes and multiple threads:
       Terminal 1:
-        > ./pipeline 0 graph_mp.txt
+        > ./barrier 0 graph_mp.txt
       Terminal 2:
-        > ./pipeline 1 graph_mp.txt
+        > ./barrier 1 graph_mp.txt
       Terminal 3:
-        > ./pipeline 2 graph_mp.txt
-      Terminal 4:
-        > ./pipeline 3 graph_mp.txt
+        > ./barrier 2 graph_mp.txt
 
   Windows:
-    Follow the same as above, but replace "./pipeline" with "pipeline"
+    Follow the same as above, but replace "./barrier" with "barrier"

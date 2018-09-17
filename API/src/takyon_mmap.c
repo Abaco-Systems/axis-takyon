@@ -723,10 +723,13 @@ bool tknCreate(TakyonPath *path) {
       mmap_path->recv_buffer_list[buf_index].local_recver_addr = recver_addr;
     } else {
       // Takyon needs to allocate
-      snprintf(local_mmap_name, MAX_MMAP_NAME_CHARS, "TknMMAP%s_app_%d_%lld_%d", path->attrs.is_endpointA ? "c" : "s", buf_index, (unsigned long long)recver_bytes, path_id);
-      if (!mmapAlloc(local_mmap_name, recver_bytes, &addr, &mmap_path->recv_buffer_list[buf_index].local_mmap_app, path->attrs.error_message)) {
-        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create shared app memory: %s\n", local_mmap_name);
-        goto cleanup;
+      addr = NULL;
+      if (recver_bytes > 0) {
+        snprintf(local_mmap_name, MAX_MMAP_NAME_CHARS, "TknMMAP%s_app_%d_%lld_%d", path->attrs.is_endpointA ? "c" : "s", buf_index, (unsigned long long)recver_bytes, path_id);
+        if (!mmapAlloc(local_mmap_name, recver_bytes, &addr, &mmap_path->recv_buffer_list[buf_index].local_mmap_app, path->attrs.error_message)) {
+          TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create shared app memory: %s\n", local_mmap_name);
+          goto cleanup;
+        }
       }
       path->attrs.recver_addr_list[buf_index] = (size_t)addr;
       mmap_path->recv_buffer_list[buf_index].local_recver_addr = (size_t)addr;
@@ -827,10 +830,13 @@ bool tknCreate(TakyonPath *path) {
     } else {
       snprintf(remote_mmap_name, MAX_MMAP_NAME_CHARS, "TknMMAP%s_app_%d_%lld_%d", path->attrs.is_endpointA ? "s" : "c", buf_index, (unsigned long long)remote_recver_bytes, path_id);
     }
-    success = mmapGetTimed(remote_mmap_name, remote_recver_bytes, &addr, &mmap_path->send_buffer_list[buf_index].remote_mmap_app, private_path->create_timeout_ns, &timed_out, path->attrs.error_message);
-    if ((!success) || timed_out) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get handle to remote shared app memory: %s\n", remote_mmap_name);
-      goto cleanup;
+    addr = NULL;
+    if (remote_recver_bytes > 0) {
+      success = mmapGetTimed(remote_mmap_name, remote_recver_bytes, &addr, &mmap_path->send_buffer_list[buf_index].remote_mmap_app, private_path->create_timeout_ns, &timed_out, path->attrs.error_message);
+      if ((!success) || timed_out) {
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get handle to remote shared app memory: %s\n", remote_mmap_name);
+        goto cleanup;
+      }
     }
     mmap_path->send_buffer_list[buf_index].remote_recver_addr = (size_t)addr;
     if (is_shared_pointer) {
