@@ -435,6 +435,7 @@ bool socketCreateLocalClient(const char *socket_name, TakyonSocket *socket_fd_re
         break;
       }
       int sock_error = WSAGetLastError();
+      /*+ check for EBADF? Test with reduce example: graph_mp.txt */
       if (sock_error != WSAECONNREFUSED) {
         TAKYON_RECORD_ERROR(error_message, "Could not connect unix socket. sock_error=%d\n", sock_error);
         closesocket(socket_fd);
@@ -505,6 +506,7 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSock
     if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
       int sock_error = WSAGetLastError();
       closesocket(socket_fd);
+      /*+ check for EBADF? Test with reduce example: graph_mp.txt */
       if (sock_error == WSAECONNREFUSED) {
         // Server side is not ready yet
         int64_t ellapsed_time_ns = clockTimeNanoseconds() - start_time;

@@ -218,8 +218,9 @@ static TakyonCollectiveGroup *takyonGetCollective(TakyonGraph *graph, const char
 }
 
 static const char *collectiveTypeToName(TakyonCollectiveType type) {
-  if (type == TAKYON_COLLECTIVE_ONE2ONE) return "ONE2ONE";
   if (type == TAKYON_COLLECTIVE_BARRIER) return "BARRIER";
+  if (type == TAKYON_COLLECTIVE_REDUCE) return "REDUCE";
+  if (type == TAKYON_COLLECTIVE_ONE2ONE) return "ONE2ONE";
   if (type == TAKYON_COLLECTIVE_SCATTER) return "SCATTER";
   if (type == TAKYON_COLLECTIVE_GATHER) return "GATHER";
   return "Unknown";
@@ -414,13 +415,13 @@ static void validateTreeChildren(TakyonPathTree *current_path_tree, TakyonCollec
   int path_index1 = current_path_tree->children[0].path_index;
   TakyonCollectiveConnection *path1 = &path_list[path_index1];
   int path_id1 = path1->path_id;
-  TakyonConnection *connection1 = &graph->path_list[path_id1];
+  TakyonConnection *connection1 = getPath(graph, path_id1);
   int thread_id1 = path1->src_is_endpointA ? connection1->thread_idA : connection1->thread_idB;
   for (int i=1; i<current_path_tree->num_children; i++) {
     int path_index2 = current_path_tree->children[i].path_index;
     TakyonCollectiveConnection *path2 = &path_list[path_index2];
     int path_id2 = path2->path_id;
-    TakyonConnection *connection2 = &graph->path_list[path_id2];
+    TakyonConnection *connection2 = getPath(graph, path_id2);
     int thread_id2 = path2->src_is_endpointA ? connection2->thread_idA : connection2->thread_idB;
     if (thread_id2 != thread_id1) {
       fprintf(stderr, "Line %d: The path tree has siblings that do not have the same source thread\n", line_count);
@@ -840,8 +841,9 @@ static char *parseMemoryBlocks(int my_process_id, TakyonGraph *graph, char *data
 }
 
 static TakyonCollectiveType getCollectiveTypeFromText(const char *value, int line_count) {
-  if (strcmp(value, "ONE2ONE") == 0) return TAKYON_COLLECTIVE_ONE2ONE;
   if (strcmp(value, "BARRIER") == 0) return TAKYON_COLLECTIVE_BARRIER;
+  if (strcmp(value, "REDUCE") == 0) return TAKYON_COLLECTIVE_REDUCE;
+  if (strcmp(value, "ONE2ONE") == 0) return TAKYON_COLLECTIVE_ONE2ONE;
   if (strcmp(value, "SCATTER") == 0) return TAKYON_COLLECTIVE_SCATTER;
   if (strcmp(value, "GATHER") == 0) return TAKYON_COLLECTIVE_GATHER;
   fprintf(stderr, "Line %d: The name '%s' is not a valid collective type.\n", line_count, value);
@@ -877,7 +879,7 @@ static char *parseCollectiveGroups(TakyonGraph *graph, char *data_ptr, char *key
     // Get path list: <path_id>:{A | B}
     data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
     validateKeyValue("PathSrcIds:", data_ptr, keyword, value, line_count);
-    if (collective_desc->type == TAKYON_COLLECTIVE_BARRIER) {
+    if ((collective_desc->type == TAKYON_COLLECTIVE_BARRIER) || (collective_desc->type == TAKYON_COLLECTIVE_REDUCE)) {
       getCollectivePathTree(graph, value, &collective_desc->num_paths, &collective_desc->path_list, &collective_desc->path_tree, line_count);
     } else {
       getCollectivePathList(graph, value, &collective_desc->num_paths, &collective_desc->path_list, line_count);
@@ -898,7 +900,7 @@ static char *parseCollectiveGroups(TakyonGraph *graph, char *data_ptr, char *key
     // Validate collective connectivity
     if (collective_desc->type == TAKYON_COLLECTIVE_ONE2ONE) {
       // Nothing extra to validate
-    } else if (collective_desc->type == TAKYON_COLLECTIVE_BARRIER) {
+    } else if ((collective_desc->type == TAKYON_COLLECTIVE_BARRIER) || (collective_desc->type == TAKYON_COLLECTIVE_REDUCE)) {
       // NOTES:
       //   Input format guarantees a propert tree structure
       //   Above code guarantees no duplicated paths, which means no cyclic dependencies.
@@ -1728,6 +1730,64 @@ TakyonCollectiveBarrier *takyonGetBarrier(TakyonGraph *graph, const char *name, 
     collective = takyonBarrierInit(nchildren, parent_path, child_path_list);
     free(child_path_list);
   }
+  if (collective == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
+  }
+  return collective;
+}
+
+TakyonCollectiveReduce *takyonGetReduce(TakyonGraph *graph, const char *name, int thread_id) {
+  TakyonCollectiveReduce *collective = NULL;
+  TakyonCollectiveGroup *collective_desc = takyonGetCollective(graph, name);
+  if ((collective_desc != NULL) && (collective_desc->type == TAKYON_COLLECTIVE_REDUCE)) {
+    // Get the parent
+    TakyonPath *parent_path = NULL;
+    for (int j=0; j<collective_desc->num_paths; j++) {
+      TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+      TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idB == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idA == thread_id))) {
+        if (parent_path != NULL) {
+          TakyonThreadGroup *thread_group = takyonGetThreadGroup(graph, thread_id);
+          int instance = thread_id - thread_group->starting_thread_id;
+          fprintf(stderr, "%s(): The collective reduce '%s' has two tree nodes wth the same thread ID %s[%d]\n", __FUNCTION__, name, thread_group->name, instance);
+          exit(EXIT_FAILURE);
+        }
+        parent_path = (collective_path->src_is_endpointA) ? path_desc->pathB: path_desc->pathA;
+      }
+    }
+    // Get the number of children
+    int nchildren = 0;
+    for (int j=0; j<collective_desc->num_paths; j++) {
+      TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+      TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+      if ((collective_path->src_is_endpointA && (path_desc->thread_idA == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idB == thread_id))) {
+        nchildren++;
+      }
+    }
+    // Create the child list
+    TakyonPath **child_path_list = NULL;
+    int child_index = 0;
+    if (nchildren > 0) {
+      child_path_list = (TakyonPath **)calloc(nchildren, sizeof(TakyonPath *));
+      validateAllocation(child_path_list, __FUNCTION__);
+      for (int j=0; j<collective_desc->num_paths; j++) {
+        TakyonCollectiveConnection *collective_path = &collective_desc->path_list[j];
+        TakyonConnection *path_desc = getPath(graph, collective_path->path_id);
+        if ((collective_path->src_is_endpointA && (path_desc->thread_idA == thread_id)) || ((!collective_path->src_is_endpointA) && (path_desc->thread_idB == thread_id))) {
+          child_path_list[child_index] = (collective_path->src_is_endpointA) ? path_desc->pathA: path_desc->pathB;
+          child_index++;
+        }
+      }
+    }
+    // Define collective
+    collective = takyonReduceInit(nchildren, parent_path, child_path_list);
+    free(child_path_list);
+  }
+  if (collective == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
+  }
   return collective;
 }
 
@@ -1777,6 +1837,10 @@ TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, 
     if (src_path_list != NULL) free(src_path_list);
     if (dest_path_list != NULL) free(dest_path_list);
   }
+  if (collective == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
+  }
   return collective;
 }
 
@@ -1799,6 +1863,10 @@ TakyonScatterSrc *takyonGetScatterSrc(TakyonGraph *graph, const char *name, int 
       free(path_list);
     }
   }
+  if (scatter_src == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
+  }
   return scatter_src;
 }
 
@@ -1819,6 +1887,10 @@ TakyonScatterDest *takyonGetScatterDest(TakyonGraph *graph, const char *name, in
       }
     }
   }
+  if (scatter_dest == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
+  }
   return scatter_dest;
 }
 
@@ -1838,6 +1910,10 @@ TakyonGatherSrc *takyonGetGatherSrc(TakyonGraph *graph, const char *name, int th
         }
       }
     }
+  }
+  if (gather_src == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
   }
   return gather_src;
 }
@@ -1860,6 +1936,10 @@ TakyonGatherDest *takyonGetGatherDest(TakyonGraph *graph, const char *name, int 
       gather_dest = takyonGatherDestInit(collective_desc->num_paths, path_list);
       free(path_list);
     }
+  }
+  if (gather_dest == NULL) {
+    fprintf(stderr, "%s(): Failed to find the collective group '%s'\n", __FUNCTION__, name);
+    exit(EXIT_FAILURE);
   }
   return gather_dest;
 }

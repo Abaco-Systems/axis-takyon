@@ -44,6 +44,8 @@ typedef struct {
   MmapHandle local_mmap_app;
   MmapHandle remote_mmap_flags;
   MmapHandle remote_mmap_app;
+  HANDLE local_event;
+  HANDLE remote_event;
   bool send_started;
   volatile uint64_t *local_got_data_ref; // Making this uint64_t instead of bool to avoid alignment issues
   uint64_t *local_num_blocks_recved_ref;
@@ -62,8 +64,6 @@ typedef struct {
   bool connected;
   pthread_t socket_thread;
   HANDLE mutex;
-  HANDLE local_event;
-  HANDLE remote_event;
   XferBuffer *send_buffer_list;
   XferBuffer *recv_buffer_list;
   bool is_shared_pointer;
@@ -175,6 +175,7 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   *buffer->remote_offset_recved_ref = dest_offset;
   *buffer->remote_stride_recved_ref = dest_stride;
   *buffer->remote_got_data_ref = 1;
+
   if (!path->attrs.is_polling) {
     // Unlock mutex and signal receiver
     if (!unlockMutex(mmap_path->mutex, path->attrs.error_message)) {
@@ -184,8 +185,8 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
     }
     // Unlock the remote recv(), which will wake it up if it's sleeping.
     // This event is initally unsignaled. This signals it, and when the recv() gets the signal, it will auto reset to unsignaled.
-    if (!SetEvent(mmap_path->local_event)) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to signal remote receiver.\n");
+    if (!SetEvent(buffer->local_event)) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to signal remote receiver. Error=%d\n", GetLastError());
       return false;
     }
   }
@@ -269,7 +270,7 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
     }
     // Block here until send() signals the event (it's initially unsignaled)
     bool timed_out;
-    bool suceeded = waitForSignal(mmap_path->remote_event, private_path->recv_complete_timeout_ns, &timed_out, path->attrs.error_message);
+    bool suceeded = waitForSignal(buffer->remote_event, private_path->recv_complete_timeout_ns, &timed_out, path->attrs.error_message);
     if (!suceeded) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to wait for data\n");
       if (!unlockMutex(mmap_path->mutex, path->attrs.error_message)) {
@@ -371,7 +372,10 @@ static void *socket_disconnect_handler(void *user_arg) {
     // Detected socket shutdown
     mmap_path->connected = false;
     // Wake up local receiver just in case it sleeping waiting on an Event
-    if (mmap_path->remote_event != NULL) SetEvent(mmap_path->remote_event);
+    int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
+    for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
+      if (mmap_path->recv_buffer_list[buf_index].remote_event != NULL) SetEvent(mmap_path->recv_buffer_list[buf_index].remote_event);
+    }
   }
   return NULL;
 }
@@ -382,8 +386,6 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
 
   // Endpoint A allocs the mutex and condition var, and endpoint B gets a handle to it (so both need to release it)
   if (mmap_path->mutex != NULL) CloseHandle(mmap_path->mutex);
-  if (mmap_path->remote_event != NULL) CloseHandle(mmap_path->remote_event);
-  if (mmap_path->local_event != NULL) CloseHandle(mmap_path->local_event);
 
   // Free the buffers (the posix buffers are always allocated on the recieve side)
   if (mmap_path->send_buffer_list != NULL) {
@@ -396,6 +398,7 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
       if (mmap_path->send_buffer_list[buf_index].remote_mmap_app != NULL) {
         mmapFree(mmap_path->send_buffer_list[buf_index].remote_mmap_app, path->attrs.error_message);
       }
+      if (mmap_path->send_buffer_list[buf_index].local_event != NULL) CloseHandle(mmap_path->send_buffer_list[buf_index].local_event);
       // Free the send buffers, if path managed (the send buffers only exists if not pointer sharing)
       if (!mmap_path->is_shared_pointer) {
         if (mmap_path->send_buffer_list[buf_index].sender_addr_alloced && (mmap_path->send_buffer_list[buf_index].sender_addr != 0)) {
@@ -415,6 +418,7 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
       if (mmap_path->recv_buffer_list[buf_index].local_mmap_flags != NULL) {
         mmapFree(mmap_path->recv_buffer_list[buf_index].local_mmap_flags, path->attrs.error_message);
       }
+      if (mmap_path->recv_buffer_list[buf_index].remote_event != NULL) CloseHandle(mmap_path->recv_buffer_list[buf_index].remote_event);
     }
     free(mmap_path->recv_buffer_list);
   }
@@ -774,21 +778,25 @@ static bool tknCreate(TakyonPath *path) {
   }
 
   // Create the process shared synchronization mutex (initially unlocked by both endpoints
-  char local_event_name[MAX_MMAP_NAME_CHARS];
-  char remote_event_name[MAX_MMAP_NAME_CHARS];
-  snprintf(local_event_name,  MAX_MMAP_NAME_CHARS, "TknMMAP_event_%d_%s", path_id, path->attrs.is_endpointA ? "AtoB" : "BtoA");
-  snprintf(remote_event_name, MAX_MMAP_NAME_CHARS, "TknMMAP_event_%d_%s", path_id, path->attrs.is_endpointA ? "BtoA" : "AtoB");
-  // Local side (initially unsignaled, and does auto reset after signal grabbed)
-  mmap_path->local_event = CreateEvent(NULL, FALSE, FALSE, local_event_name);
-  if (mmap_path->local_event == NULL) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create process shared signaling mutex: %s\n", local_event_name);
-    goto cleanup;
+  for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
+    char local_event_name[MAX_MMAP_NAME_CHARS];
+    snprintf(local_event_name,  MAX_MMAP_NAME_CHARS, "TknMMAP_event_%d_%d_%s", path_id, buf_index, path->attrs.is_endpointA ? "AtoB" : "BtoA");
+    // Local side (initially unsignaled, and does auto reset after signal grabbed)
+    mmap_path->send_buffer_list[buf_index].local_event = CreateEvent(NULL, FALSE, FALSE, local_event_name);
+    if (mmap_path->send_buffer_list[buf_index].local_event == NULL) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create process shared signaling mutex: %s\n", local_event_name);
+      goto cleanup;
+    }
   }
-  // Remote side (initially unsignaled, and does auto reset after signal grabbed)
-  mmap_path->remote_event = CreateEvent(NULL, FALSE, FALSE, remote_event_name);
-  if (mmap_path->remote_event == NULL) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create process shared signaling mutex: %s\n", remote_event_name);
-    goto cleanup;
+  for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
+    char remote_event_name[MAX_MMAP_NAME_CHARS];
+    snprintf(remote_event_name, MAX_MMAP_NAME_CHARS, "TknMMAP_event_%d_%d_%s", path_id, buf_index, path->attrs.is_endpointA ? "BtoA" : "AtoB");
+    // Remote side (initially unsignaled, and does auto reset after signal grabbed)
+    mmap_path->recv_buffer_list[buf_index].remote_event = CreateEvent(NULL, FALSE, FALSE, remote_event_name);
+    if (mmap_path->recv_buffer_list[buf_index].remote_event == NULL) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create process shared signaling mutex: %s\n", remote_event_name);
+      goto cleanup;
+    }
   }
 
   // Socket round trip, to make sure the remote memory handle is the latest and not stale

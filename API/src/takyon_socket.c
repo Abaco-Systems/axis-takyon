@@ -379,9 +379,9 @@ bool tknCreate(TakyonPath *path) {
 
   // Supported formats:
   //   "Socket -local -ID <ID> [-reuse]"
-  //   "Socket -remoteIP <IP> -port <port>"
-  //   "Socket -localIP <IP> -port <port> [-reuse]"
-  //   "Socket -localIP Any -port <port> [-reuse]"
+  //   "Socket -client <IP> -port <port>"
+  //   "Socket -server <IP> -port <port> [-reuse]"
+  //   "Socket -server Any -port <port> [-reuse]"
   bool is_a_local_socket = argGetFlag(path->attrs.interconnect, "-local");
   int path_id;
   int temp_port_number = 0;
@@ -405,17 +405,17 @@ bool tknCreate(TakyonPath *path) {
   } else {
     // TCP socket
     bool found;
-    bool ok = argGetText(path->attrs.interconnect, "-remoteIP", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
+    bool ok = argGetText(path->attrs.interconnect, "-client", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
     if (!ok) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for TCP socket must have one of -localIP <IP> or -remoteIP <IP | Any>\n");
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for TCP socket must have one of -server <IP> or -client <IP | Any>\n");
       return false;
     }
     if (found) {
       is_client = true;
     } else {
-      ok = argGetText(path->attrs.interconnect, "-localIP", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
+      ok = argGetText(path->attrs.interconnect, "-server", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
       if (!ok || !found) {
-        TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for TCP socket must have one of -localIP <IP> or -remoteIP <IP | Any>\n");
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for TCP socket must have one of -server <IP> or -client <IP | Any>\n");
         return false;
       }
       is_client = false;

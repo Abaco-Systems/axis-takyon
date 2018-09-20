@@ -41,8 +41,8 @@ Run:
         > ./determinism "Mmap -ID 1 -share" -endpointA -poll
         > ./determinism "Socket -local -ID 1" -endpointA
         > ./determinism "Socket -local -ID 1" -endpointA -poll
-        > ./determinism "Socket -remoteIP 127.0.0.1 -port 12345" -endpointA
-        > ./determinism "Socket -remoteIP 127.0.0.1 -port 12345" -endpointA -poll
+        > ./determinism "Socket -client 127.0.0.1 -port 12345" -endpointA
+        > ./determinism "Socket -client 127.0.0.1 -port 12345" -endpointA -poll
       Terminal 2 (endpoint B test variations, to match with endpoint A):
         > ./determinism "Mmap -ID 1"
         > ./determinism "Mmap -ID 1" -poll
@@ -50,8 +50,8 @@ Run:
         > ./determinism "Mmap -ID 1 -share" -poll
         > ./determinism "Socket -local -ID 1"
         > ./determinism "Socket -local -ID 1" -poll
-        > ./determinism "Socket -localIP 127.0.0.1 -port 12345"
-        > ./determinism "Socket -localIP Any -port 12345" -poll
+        > ./determinism "Socket -server 127.0.0.1 -port 12345"
+        > ./determinism "Socket -server Any -port 12345" -poll
 
   Windows:
     Follow the same as above, but replace "./determinism" with "determinism"

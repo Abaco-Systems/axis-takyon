@@ -274,11 +274,11 @@ bool tknCreate(TakyonPath *path) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
 
   // Supported formats:
-  //   "SocketDatagram -unicastSend -remoteIP <IP> -port <port>"
-  //   "SocketDatagram -unicastRecv -localIP <IP> -port <port> [-reuse]"
-  //   "SocketDatagram -unicastRecv -localIP Any -port <port> [-reuse]"
-  //   "SocketDatagram -multicastSend -localIP <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]"
-  //   "SocketDatagram -multicastRecv -localIP <IP> -group <IP> -port <port> [-reuse]"
+  //   "SocketDatagram -unicastSend -client <IP> -port <port>"
+  //   "SocketDatagram -unicastRecv -server <IP> -port <port> [-reuse]"
+  //   "SocketDatagram -unicastRecv -server Any -port <port> [-reuse]"
+  //   "SocketDatagram -multicastSend -server <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]"
+  //   "SocketDatagram -multicastRecv -server <IP> -group <IP> -port <port> [-reuse]"
   // Valid multicast addresses: 224.0.0.0 through 239.255.255.255, but some are reserved
   // Supported TTL values:
   //   0:   Are restricted to the same host
@@ -312,21 +312,21 @@ bool tknCreate(TakyonPath *path) {
   bool found = false;
   bool ok;
   if (is_unicast_sender) {
-    ok = argGetText(path->attrs.interconnect, "-remoteIP", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
+    ok = argGetText(path->attrs.interconnect, "-client", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
     if (!ok || !found) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for a unicast sender socket must have -remoteIP <IP>\n");
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for a unicast sender socket must have -client <IP>\n");
       return false;
     }
   } else if (is_unicast_recver) {
-    ok = argGetText(path->attrs.interconnect, "-localIP", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
+    ok = argGetText(path->attrs.interconnect, "-server", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
     if (!ok || !found) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for a unicast receiver socket must have -localIP <IP>, where <IP> can be 'Any'\n");
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for a unicast receiver socket must have -server <IP>, where <IP> can be 'Any'\n");
       return false;
     }
   } else {
-    ok = argGetText(path->attrs.interconnect, "-localIP", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
+    ok = argGetText(path->attrs.interconnect, "-server", ip_addr, MAX_TAKYON_INTERCONNECT_CHARS, &found, path->attrs.error_message);
     if (!ok || !found) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for datagram multicast socket must have -localIP <IP>\n");
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec for datagram multicast socket must have -server <IP>\n");
       return false;
     }
   }

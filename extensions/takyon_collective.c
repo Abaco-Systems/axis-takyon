@@ -53,7 +53,7 @@ void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
   bool ok;
 
   // NOTE: This is a tree based barrier.
-  // Signalling starts at the top of the tree and works it way down to the leaves.
+  // Signaling starts at the top of the tree and works it way down to the leaves.
   // Once all the leaves get the signal, then it works its way back to the top of the tree.
   // This is a log(N) barrier, where the base of the log() is the number of children per node.
 
@@ -112,6 +112,156 @@ void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
 }
 
 void takyonBarrierFinalize(TakyonCollectiveBarrier *collective) {
+  free(collective->child_path_list);
+  free(collective);
+}
+
+TakyonCollectiveReduce *takyonReduceInit(int nchildren, TakyonPath *parent_path, TakyonPath **child_path_list) {
+  if (nchildren < 0) {
+    fprintf(stderr, "%s(): npaths must be >= zero\n", __FUNCTION__);
+    exit(EXIT_FAILURE);
+  }
+  if ((nchildren > 0) && (child_path_list == NULL)) {
+    fprintf(stderr, "%s(): child_path_list is NULL but nchildren is %d\n", __FUNCTION__, nchildren);
+    exit(EXIT_FAILURE);
+  }
+  if ((nchildren == 0) && (child_path_list != NULL)) {
+    fprintf(stderr, "%s(): child_path_list is not NULL but nchildren is %d\n", __FUNCTION__, nchildren);
+    exit(EXIT_FAILURE);
+  }
+  TakyonCollectiveReduce *collective = (TakyonCollectiveReduce *)calloc(1, sizeof(TakyonCollectiveReduce));
+  if (collective == NULL) {
+    fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
+    exit(EXIT_FAILURE);
+  }
+  collective->parent_path = parent_path;
+  collective->nchildren = nchildren;
+  if (nchildren > 0) {
+    collective->child_path_list = (TakyonPath **)calloc(nchildren, sizeof(TakyonPath *));
+    if (collective->child_path_list == NULL) {
+      fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    for (int i=0; i<nchildren; i++) {
+      if (child_path_list[i] == NULL) {
+        fprintf(stderr, "%s(): child_path_list[%d] is NULL\n", __FUNCTION__, i);
+        exit(EXIT_FAILURE);
+      }
+      collective->child_path_list[i] = child_path_list[i];
+    }
+  }
+  return collective;
+}
+
+static void takyonReduceRun(TakyonCollectiveReduce *collective, int buffer, uint64_t nelements, uint64_t bytes_per_elem, void(*reduce_function)(uint64_t nelements,void *a,void *b), void *a, bool scatter_result) {
+  bool timed_out;
+  bool ok;
+  uint64_t bytes_expected = nelements * bytes_per_elem;
+
+  // NOTE: This is a tree based reduction.
+  // The reduction starts at the leaves and works it way up to the top of the tree.
+  // This is a log(N) reduction, where the base of the log() is the number of children per node.
+
+  // If have children, then wait for thier data to arrive
+  for (int i=0; i<collective->nchildren; i++) {
+    // Wait for the data
+    uint64_t bytes_received;
+    ok = takyonRecv(collective->child_path_list[i], buffer, &bytes_received, NULL, &timed_out);
+    if (ok && timed_out) {
+      fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    if (!ok) {
+      fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->child_path_list[i]->attrs.error_message);
+      exit(EXIT_FAILURE);
+    }
+    if (bytes_received != bytes_expected) {
+      fprintf(stderr, "%s(): Received %llu bytes but expected %llu\n", __FUNCTION__, (unsigned long long)bytes_received, (unsigned long long)bytes_expected);
+      exit(EXIT_FAILURE);
+    }
+    // Reduce the data
+    // NOTE: The 'a' vector comes from the send buffer of the parent pathi fi it exists, otherwise it's the root vector
+    void *b = (void *)collective->child_path_list[i]->attrs.recver_addr_list[buffer];
+    // This is an inplace operation where the result goes into vector 'a'
+    reduce_function(nelements, a, b);
+  }
+
+  // If parent exists, send the reduced data
+  if (collective->parent_path != NULL) {
+    // Send reduced value which is already in the sender's buffer
+    ok = takyonSend(collective->parent_path, buffer, bytes_expected, 0, 0, &timed_out);
+    if (ok && timed_out) {
+      fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+      exit(EXIT_FAILURE);
+    }
+    if (!ok) {
+      fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->parent_path->attrs.error_message);
+      exit(EXIT_FAILURE);
+    }
+
+  } else {
+    // This is the root of the tree
+    // The results are in the 'a' vector
+  }
+
+  // The root thrad has the result now, so send it to all the children
+  if (scatter_result) {
+    // Pass the results from the root to all children
+    if (collective->parent_path != NULL) {
+      // Wait for data from the parent
+      ok = takyonRecv(collective->parent_path, buffer, NULL, NULL, &timed_out);
+      if (ok && timed_out) {
+        fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+        exit(EXIT_FAILURE);
+      }
+      if (!ok) {
+        fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->parent_path->attrs.error_message);
+        exit(EXIT_FAILURE);
+      }
+    }
+    // Send results to the children
+    for (int i=0; i<collective->nchildren; i++) {
+      // Move the data to the send buffer
+      if (collective->parent_path == NULL) {
+        // This is the root
+        memcpy((void *)collective->child_path_list[i]->attrs.sender_addr_list[buffer], a, bytes_expected);
+      } else {
+        // This is a child
+        memcpy((void *)collective->child_path_list[i]->attrs.sender_addr_list[buffer], (void *)collective->parent_path->attrs.recver_addr_list[buffer], bytes_expected);
+      }
+      // Send the data to the child
+      ok = takyonSend(collective->child_path_list[i], buffer, bytes_expected, 0, 0, &timed_out);
+      if (ok && timed_out) {
+        fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
+        exit(EXIT_FAILURE);
+      }
+      if (!ok) {
+        fprintf(stderr, "%s(): failed with error:\n%s\n", __FUNCTION__, collective->child_path_list[i]->attrs.error_message);
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+}
+
+void takyonReduceRoot(TakyonCollectiveReduce *collective, int buffer, uint64_t nelements, uint64_t bytes_per_elem, void(*reduce_function)(uint64_t nelements,void *a,void *b), void *data, bool scatter_result) {
+  if (collective->parent_path != NULL) {
+    fprintf(stderr, "%s(): This thread is not the root of this reduce collective; use takyonReduceChild() instead.\n", __FUNCTION__);
+    exit(EXIT_FAILURE);
+  }
+  takyonReduceRun(collective, buffer, nelements, bytes_per_elem, reduce_function, data, scatter_result);
+}
+
+void takyonReduceChild(TakyonCollectiveReduce *collective, int buffer, uint64_t nelements, uint64_t bytes_per_elem, void(*reduce_function)(uint64_t nelements,void *a,void *b), bool scatter_result) {
+  if (collective->parent_path == NULL) {
+    fprintf(stderr, "%s(): This thread is the root of this reduce collective; use takyonReduceRoot() instead.\n", __FUNCTION__);
+    exit(EXIT_FAILURE);
+  }
+  // NOTE: This thread's data is in the senders buffer
+  void *data = (void *)collective->parent_path->attrs.sender_addr_list[buffer];
+  takyonReduceRun(collective, buffer, nelements, bytes_per_elem, reduce_function, data, scatter_result);
+}
+
+void takyonReduceFinalize(TakyonCollectiveReduce *collective) {
   free(collective->child_path_list);
   free(collective);
 }

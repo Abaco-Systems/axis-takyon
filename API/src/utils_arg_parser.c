@@ -129,7 +129,7 @@ bool argGetText(const char *arguments, const char *name, char *result, const int
     TAKYON_RECORD_ERROR(error_message, "Arg '%s' missing its value in argument list '%s'\n", name, arguments);
     return false;
   }
-  value_ptr++;
+  while (*value_ptr == ' ') value_ptr++;
   // Get the length of the value text
   int num_chars = argLength(value_ptr);
   if (num_chars == 0) {

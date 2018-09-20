@@ -46,8 +46,8 @@ Path: 2
   InterconnectB: Mmap -ID 1 -reuse
 Path: 3
   Thread: pipe[3], pipe[4]
-  InterconnectA: Socket -remoteIP 127.0.0.1 -port 12345
-  InterconnectB: Socket -localIP 127.0.0.1 -port 12345 -reuse
+  InterconnectA: Socket -client 127.0.0.1 -port 12345
+  InterconnectB: Socket -server 127.0.0.1 -port 12345 -reuse
 
 CollectiveGroups
 CollectiveGroup: pipeline

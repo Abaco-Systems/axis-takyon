@@ -31,13 +31,13 @@ Run:
       > ./hello "Mmap -ID 1" -endpointA
       > ./hello "Mmap -ID 1 -share" -endpointA
       > ./hello "Socket -local -ID 1" -endpointA
-      > ./hello "Socket -remoteIP 127.0.0.1 -port 12345" -endpointA
+      > ./hello "Socket -client 127.0.0.1 -port 12345" -endpointA
 
     Terminal 2 (endpoint B test variations, to match with endpoint A):
       > ./hello "Mmap -ID 1"
       > ./hello "Mmap -ID 1 -share"
       > ./hello "Socket -local -ID 1"
-      > ./hello "Socket -localIP 127.0.0.1 -port 12345"
+      > ./hello "Socket -server 127.0.0.1 -port 12345 -reuse"
 
   Windows:
     Follow the same as above, but replace "./hello" with "hello"

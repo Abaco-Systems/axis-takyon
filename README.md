@@ -16,7 +16,7 @@
 Takyon is a high level, high speed, portable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the embedded HPC industry, with no intention to compete with MPI which is focused on the HPC industry. Like MPI, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API. This is to provide an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application). Here's a hello world example that could work with any interconnect and any locality:
 ```
 // Sender
-TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -remoteIP 192.168.35.23 -port 12345");
+TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -client 192.168.35.23 -port 12345");
 TakyonPath *path = takyonCreate(&attrs);
 char *data_addr = (char *)path->attrs.sender_addr_list[buffer];
 uint64_t nbytes = 1 + (uint64_t)sprintf(data_addr, "%s", "Hello World!");
@@ -25,7 +25,7 @@ if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(p
 takyonDestroy(&path);
 
 // Receiver
-TakyonPathAttributes attrs = takyonAllocAttributes(!is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -localIP Any -port 12345");
+TakyonPathAttributes attrs = takyonAllocAttributes(!is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -server Any -port 12345");
 TakyonPath *path = takyonCreate(&attrs);
 takyonRecv(path, buffer, NULL/*&bytes_received*/, NULL/*&offset*/, NULL/*&timed_out*/);
 char *data_addr = (char *)(path->attrs.recver_addr_list[buffer] + offset);
@@ -138,13 +138,13 @@ These are reliable two-way connections where both endpoints must be created toge
 - Inter-process (endpoints in the same OS)  
 `Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mmap] [-remote_mmap_prefix <name>]`  
 `Socket -local -ID <ID> [-reuse]`  
-`Socket -remoteIP 127.0.0.1 -port <port>`  
-`Socket -localIP 127.0.0.1 -port <port> [-reuse]`  
-`Socket -localIP Any -port <port> [-reuse]`
+`Socket -client 127.0.0.1 -port <port>`  
+`Socket -server 127.0.0.1 -port <port> [-reuse]`  
+`Socket -server Any -port <port> [-reuse]`
 - Inter-processor (endpoints not in the same OS)  
-`Socket -remoteIP <IP> -port <port>`  
-`Socket -localIP <IP> -port <port> [-reuse]`  
-`Socket -localIP Any -port <port> [-reuse]`
+`Socket -client <IP> -port <port>`  
+`Socket -server <IP> -port <port> [-reuse]`  
+`Socket -server Any -port <port> [-reuse]`
 ### Bi-Directional Parameter Descriptions
 - `-ID <ID>`  
 Can be any integer
@@ -156,31 +156,31 @@ Informs the path that all of the receive buffers where allocated by the applicat
 If the remote endpoint is using an application allocated named memory map for the buffers, this defines the name used to create the memory maps.
 - `-local`  
 Uses a Unix local socket which is better performance due to avoid some of the TCP stack
-- `-remoteIP 127.0.0.1`  
+- `-client 127.0.0.1`  
 The client side of the connection. 127.0.0.1 is a special loop back address used to keep communication local (in the same OS). This uses the full TCP stack so it's not as efficient as using `-local`.
-- `-localIP 127.0.0.1`  
+- `-server 127.0.0.1`  
 The server side of the loop back connection.
 - `-port <port>`  
 Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
-- `-remoteIP <IP>`  
-The client side of the TCP connection. The IP address must be the same as the server side (`-localIP` side).
-- `-localIP <IP>`  
-The server side of the TCP connection. The IP address must be the same as the client side (`-remoteIP` side).
-- `-localIP Any`  
+- `-client <IP>`  
+The client side of the TCP connection. The IP address must be the same as the server side (`-server` side).
+- `-server <IP>`  
+The server side of the TCP connection. The IP address must be the same as the client side (`-client` side).
+- `-server Any`  
 The server side of the TCP connection. This allows the connection to occur on any IP interface that is listening on the specified port number. Since the client side must specify an IP address, this inherently defines the IP interface that will be used on the server side. Be careful to avoid multiple interfaces using the same port number.
 - `-reuse`  
 In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
 ### Connectionless Specifications (one sided)
 These are one sided connections where only one side needs to be created to allow for unreliable UDP (user datagram protocol) transfers. Typically good for live-streaming services and IO devices where it's OK to periodically drop data.
 - Inter-process & inter-processor  
-`SocketDatagram -unicastSend -remoteIP <IP> -port <port>`  
-`SocketDatagram -unicastRecv -localIP <IP> -port <port> [-reuse]`  
-`SocketDatagram -multicastSend -localIP <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]`  
-`SocketDatagram -multicastRecv -localIP <IP> -group <IP> -port <port> [-reuse]`
+`SocketDatagram -unicastSend -client <IP> -port <port>`  
+`SocketDatagram -unicastRecv -server <IP> -port <port> [-reuse]`  
+`SocketDatagram -multicastSend -server <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]`  
+`SocketDatagram -multicastRecv -server <IP> -group <IP> -port <port> [-reuse]`
 ### Connectionless Parameter Descriptions
-- `-remoteIP <IP>`  
+- `-client <IP>`  
 The sender side of a UDP connection. The IP address must be where the datagrams will be sent to.
-- `-localIP <IP>`  
+- `-server <IP>`  
 The IP addr of the local interface of the UDP connection. If this is a unicast, then the IP address can be 'Any' which will listen for activity on any interface for the specified port number.
 - `-group <IP>`  
 The multicast group to join. The IP address must be in the range 224.0.0.0 through 239.255.255.255. Some are reserved so make sure to use an unused address.
@@ -215,6 +215,7 @@ These will be needed by Takyon applications:
 - determinism: Shows the determinism of an interconnect via multple trasfer times displayed in a histogram.
 - fault_tolerant: Shows that connections can be broken (via timeouts, cable disconnection, or control-C) then recover from the failure.
 - barrier: Uses the graph extension functions to create a pipeline and barrier collective, where the barrier is used to synchronize the pipeline processing.
+- reduce: Uses the graph extension functions to create a reduction collective. The app defines the reduction operation. The results can optionally be broadcast to all threads involved.
 - pipeline: Uses the graph extension functions to create a long data processing path by connecting a set of Takyon paths in series.
 - scatter_gather: Uses the graph extension functions to create a collective example similar to MPI.
 - connectionless: Shows how Takyon can also be used with one sided connectionless interconnects (including multicast), such as live streaming and IO devices like GigE cameras, Lidar, analog-to-digital and digital-to-analog.

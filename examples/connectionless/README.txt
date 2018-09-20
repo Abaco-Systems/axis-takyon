@@ -32,15 +32,15 @@ Run:
 
     Unicast experiments:
       Terminal 1 (endpoint A test variations, to match with endpoint B):
-        > ./connectionless "SocketDatagram -unicastSend -remoteIP 127.0.0.1 -port 12345" -endpointA
+        > ./connectionless "SocketDatagram -unicastSend -client 127.0.0.1 -port 12345" -endpointA
       Terminal 2 (endpoint B test variations, to match with endpoint A):
-        > ./connectionless "SocketDatagram -unicastRecv -localIP 127.0.0.1 -port 12345"
+        > ./connectionless "SocketDatagram -unicastRecv -server 127.0.0.1 -port 12345"
 
     Multicast experiments:
       Terminal 1 (endpoint A test variations, to match with endpoint B):
-        > ./connectionless "SocketDatagram -multicastSend -localIP 127.0.0.1 -group 239.1.2.3 -port 12345" -endpointA
+        > ./connectionless "SocketDatagram -multicastSend -server 127.0.0.1 -group 239.1.2.3 -port 12345" -endpointA
       Terminal 2 (endpoint B test variations, to match with endpoint A):
-        > ./connectionless "SocketDatagram -multicastRecv -localIP 127.0.0.1 -group 239.1.2.3 -port 12345 -reuse"
+        > ./connectionless "SocketDatagram -multicastRecv -server 127.0.0.1 -group 239.1.2.3 -port 12345 -reuse"
 
   Windows:
     Follow the same as above, but replace "./connectionless" with "connectionless"

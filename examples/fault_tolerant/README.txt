@@ -48,8 +48,8 @@ Run:
         > ./fault_tolerant "Mmap -ID 1 -share" -errors -endpointA -poll
         > ./fault_tolerant "Socket -local -ID 1" -errors -endpointA
         > ./fault_tolerant "Socket -local -ID 1" -errors-endpointA -poll
-        > ./fault_tolerant "Socket -remoteIP 127.0.0.1 -port 12345" -errors -endpointA
-        > ./fault_tolerant "Socket -remoteIP 127.0.0.1 -port 12345" -errors -endpointA -poll
+        > ./fault_tolerant "Socket -client 127.0.0.1 -port 12345" -errors -endpointA
+        > ./fault_tolerant "Socket -client 127.0.0.1 -port 12345" -errors -endpointA -poll
       Terminal 2 (endpoint B test variations, to match with endpoint A):
         > ./fault_tolerant "Mmap -ID 1" -errors
         > ./fault_tolerant "Mmap -ID 1" -errors -poll
@@ -57,8 +57,8 @@ Run:
         > ./fault_tolerant "Mmap -ID 1 -share" -errors -poll
         > ./fault_tolerant "Socket -local -ID 1 -reuse" -errors
         > ./fault_tolerant "Socket -local -ID 1 -reuse" -errors -poll
-        > ./fault_tolerant "Socket -localIP 127.0.0.1 -port 12345 -reuse" -errors
-        > ./fault_tolerant "Socket -localIP Any -port 12345 -reuse" -errors -poll
+        > ./fault_tolerant "Socket -server 127.0.0.1 -port 12345 -reuse" -errors
+        > ./fault_tolerant "Socket -server Any -port 12345 -reuse" -errors -poll
 
   Windows:
     Follow the same as above, but replace "./fault_tolerant" with "fault_tolerant"

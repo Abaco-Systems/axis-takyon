@@ -42,8 +42,8 @@ Run:
         > ./performance "Mmap -ID 1 -share" -endpointA -poll
         > ./performance "Socket -local -ID 1" -endpointA
         > ./performance "Socket -local -ID 1" -endpointA -poll
-        > ./performance "Socket -remoteIP 127.0.0.1 -port 12345" -endpointA
-        > ./performance "Socket -remoteIP 127.0.0.1 -port 12345" -endpointA -poll
+        > ./performance "Socket -client 127.0.0.1 -port 12345" -endpointA
+        > ./performance "Socket -client 127.0.0.1 -port 12345" -endpointA -poll
       Terminal 2 (endpoint B test variations, to match with endpoint A):
         > ./performance "Mmap -ID 1"
         > ./performance "Mmap -ID 1" -poll
@@ -51,8 +51,8 @@ Run:
         > ./performance "Mmap -ID 1 -share" -poll
         > ./performance "Socket -local -ID 1 -reuse"
         > ./performance "Socket -local -ID 1 -reuse" -poll
-        > ./performance "Socket -localIP 127.0.0.1 -port 12345 -reuse"
-        > ./performance "Socket -localIP Any -port 12345 -reuse" -poll
+        > ./performance "Socket -server 127.0.0.1 -port 12345 -reuse"
+        > ./performance "Socket -server Any -port 12345 -reuse" -poll
 
   Windows:
     Follow the same as above, but replace "./performance" with "performance"

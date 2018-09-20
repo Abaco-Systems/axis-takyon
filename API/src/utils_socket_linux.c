@@ -358,14 +358,14 @@ bool socketCreateLocalClient(const char *socket_name, int *socket_fd_ret, int64_
     bool retry = false;
     // Try to connect. If the server side is ready, then the connection will be made, otherwise the function will return with an error.
     if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-      if ((errno == ECONNREFUSED) || (errno == ENOENT/*No file or directory (only useful with local unix sockets)*/)) {
+      if ((errno == ECONNREFUSED) || (errno == ENOENT/*No file or directory (only useful with local unix sockets)*/) || (errno == EBADF/* bad file number*/)) {
         // Server side is not ready yet
         retry = true;
         close(socket_fd);
       } else {
         // Failed in a non recoverable way
-        close(socket_fd);
         TAKYON_RECORD_ERROR(error_message, "Could not connect local client socket. errno=%d\n", errno);
+        close(socket_fd);
         return false;
       }
     }
@@ -440,14 +440,14 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, int *socke
     bool retry = false;
     // Try to connect. If the server side is ready, then the connection will be made, otherwise the function will return with an error.
     if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-      if (errno == ECONNREFUSED) {
+      if ((errno == ECONNREFUSED) || (errno == EBADF/* bad file number*/)) {
         // Server side is not ready yet
         retry = true;
         close(socket_fd);
       } else {
         // Failed in a non recoverable way
-        close(socket_fd);
         TAKYON_RECORD_ERROR(error_message, "Could not connect TCP client socket. errno=%d\n", errno);
+        close(socket_fd);
         return false;
       }
     }

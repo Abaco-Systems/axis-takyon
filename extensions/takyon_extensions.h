@@ -29,8 +29,13 @@ typedef struct {
 } TakyonCollectiveBarrier;
 
 typedef struct {
+  int nchildren;
+  TakyonPath *parent_path;
+  TakyonPath **child_path_list;
+} TakyonCollectiveReduce;
+
+typedef struct {
   int npaths;                   // Total paths in the collective
-  /*+*/
   int num_src_paths;
   int num_dest_paths;
   TakyonPath **src_path_list;   // NULL is not using this thread
@@ -102,6 +107,7 @@ typedef struct {
 
 typedef enum {
   TAKYON_COLLECTIVE_BARRIER,
+  TAKYON_COLLECTIVE_REDUCE,
   TAKYON_COLLECTIVE_ONE2ONE,
   TAKYON_COLLECTIVE_SCATTER,
   TAKYON_COLLECTIVE_GATHER,
@@ -170,6 +176,11 @@ extern void takyonMmapFree(TakyonMmapHandle mmap_handle);
 extern TakyonCollectiveBarrier *takyonBarrierInit(int nchildren, TakyonPath *parent_path, TakyonPath **child_path_list);
 extern void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer);
 extern void takyonBarrierFinalize(TakyonCollectiveBarrier *collective);
+// Reduce
+extern TakyonCollectiveReduce *takyonReduceInit(int nchildren, TakyonPath *parent_path, TakyonPath **child_path_list);
+extern void takyonReduceRoot(TakyonCollectiveReduce *collective, int buffer, uint64_t nelements, uint64_t bytes_per_elem, void(*reduce_function)(uint64_t nelements,void *a,void *b), void *data, bool scatter_result);
+extern void takyonReduceChild(TakyonCollectiveReduce *collective, int buffer, uint64_t nelements, uint64_t bytes_per_elem, void(*reduce_function)(uint64_t nelements,void *a,void *b), bool scatter_result);
+extern void takyonReduceFinalize(TakyonCollectiveReduce *collective);
 // One2One
 extern TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, int num_src_paths, int num_dest_paths, TakyonPath **src_path_list, TakyonPath **dest_path_list);
 extern void takyonOne2OneFinalize(TakyonCollectiveOne2One *collective);
@@ -199,6 +210,7 @@ extern void takyonPrintGraph(TakyonGraph *graph);
 extern TakyonThreadGroup *takyonGetThreadGroup(TakyonGraph *graph, int thread_id);
 extern int takyonGetThreadGroupInstance(TakyonGraph *graph, int thread_id);
 extern TakyonCollectiveBarrier *takyonGetBarrier(TakyonGraph *graph, const char *name, int thread_id);
+extern TakyonCollectiveReduce *takyonGetReduce(TakyonGraph *graph, const char *name, int thread_id);
 extern TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, int thread_id);
 extern TakyonScatterSrc *takyonGetScatterSrc(TakyonGraph *graph, const char *name, int thread_id);
 extern TakyonScatterDest *takyonGetScatterDest(TakyonGraph *graph, const char *name, int thread_id);
