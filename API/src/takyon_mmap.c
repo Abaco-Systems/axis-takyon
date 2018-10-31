@@ -150,14 +150,14 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   return true;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
   return privateSendStrided(path, buffer_index, num_blocks, bytes_per_block, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
@@ -167,7 +167,7 @@ bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_of
   return privateSendStrided(path, buffer_index, num_blocks, bytes, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
@@ -283,14 +283,14 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
   return true;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
   return privateRecv(path, buffer_index, num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret, timed_out_ret);
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
@@ -381,7 +381,7 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
   }
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknDestroy(TakyonPath *path) {
@@ -459,7 +459,7 @@ bool tknDestroy(TakyonPath *path) {
   return graceful_disconnect_ok;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknCreate(TakyonPath *path) {
@@ -907,7 +907,7 @@ bool tknCreate(TakyonPath *path) {
   return false;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 void setMmapFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
   private_path->tknSend = tknSend;

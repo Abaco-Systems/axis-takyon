@@ -14,7 +14,7 @@ TARGET       = scatter_gather.exe
 C_OBJS       = main.obj scatter_gather.obj takyon_graph.obj takyon_attributes.obj takyon_collective.obj takyon_mmap.obj
 CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../extensions
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
-LIBS         = ../../API/builds/windows_intel_64bit/Takyon.lib Ws2_32.lib
+LIBS         = ../../API/builds/windows_intel_64bit/TakyonStatic.lib Ws2_32.lib
 
 .SUFFIXES: .c
 

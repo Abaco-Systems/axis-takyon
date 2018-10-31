@@ -17,6 +17,7 @@ Build:
 ------
   Mac and Linux:
     > make
+    > make USE_STATIC_LIB=Yes      // Use static Takyon lib to avoid dynamic Takyon libs
   Windows:
     > nmake -f windows.Makefile
 

@@ -145,7 +145,7 @@ extern bool pipeWakeUpSelect(int read_pipe_fd, int write_pipe_fd, char *error_me
 extern bool pipeCreate(const char *pipe_name, int *read_pipe_fd_ret, int *write_pipe_fd_ret, char *error_message);
 extern void pipeDestroy(const char *pipe_name, int read_pipe_fd, int write_pipe_fd);
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 extern void setMemcpyFunctionPointers(TakyonPrivatePath *private_path);
 extern void setSocketFunctionPointers(TakyonPrivatePath *private_path);
 extern void setSocketDatagramFunctionPointers(TakyonPrivatePath *private_path);

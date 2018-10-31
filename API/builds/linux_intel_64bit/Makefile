@@ -52,16 +52,26 @@ SOCKET_DATAGRAM_C_FILES  := takyon_socket_datagram.c
 SOCKET_DATAGRAM_C_OBJS   := $(patsubst %.c,%.o,$(SOCKET_DATAGRAM_C_FILES))
 SOCKET_DATAGRAM_LIBRARY  := libTakyonSocketDatagram.so
 
-all: $(TAKYON_LIBRARY) $(MEMCPY_LIBRARY) $(MMAP_LIBRARY) $(SOCKET_LIBRARY) $(SOCKET_DATAGRAM_LIBRARY)
+STATIC_LIB_C_FILES := $(TAKYON_C_FILES) $(MEMCPY_C_FILES) $(MMAP_C_FILES) $(SOCKET_C_FILES) $(SOCKET_DATAGRAM_C_FILES)
+STATIC_LIB_C_OBJS  := $(patsubst %.c,static_%.o,$(STATIC_LIB_C_FILES))
+STATIC_LIBRARY     := libTakyonStatic.a
+
+all: static_lib dynamic_lib
+static_lib: $(STATIC_LIBRARY)
+dynamic_lib: $(TAKYON_LIBRARY) $(MEMCPY_LIBRARY) $(MMAP_LIBRARY) $(SOCKET_LIBRARY) $(SOCKET_DATAGRAM_LIBRARY)
 
 clean:
 	rm -f *.o
 	rm -f *~
+	rm -f $(STATIC_LIBRARY)
 	rm -f $(TAKYON_LIBRARY)
 	rm -f $(MEMCPY_LIBRARY)
 	rm -f $(MMAP_LIBRARY)
 	rm -f $(SOCKET_LIBRARY)
 	rm -f $(SOCKET_DATAGRAM_LIBRARY)
+
+$(STATIC_LIB_C_OBJS): static_%.o: %.c $(TAKYON_H_FILES)
+	gcc -DBUILD_STATIC_LIB $(CFLAGS) -c $< -o $@
 
 $(TAKYON_C_OBJS): %.o: %.c $(TAKYON_H_FILES)
 	gcc $(CFLAGS) -c $< -o $@
@@ -70,6 +80,9 @@ $(MEMCPY_C_OBJS) $(MMAP_C_OBJS) $(SOCKET_C_OBJS) $(SOCKET_DATAGRAM_C_OBJS): %.o:
 	gcc $(SO_CFLAGS) -c $< -o $@
 
 $(TAKYON_LIBRARY): $(TAKYON_C_OBJS)
+	ar rcs $@ $^
+
+$(STATIC_LIBRARY): $(STATIC_LIB_C_OBJS)
 	ar rcs $@ $^
 
 # NOTE: Just in case shared object versioning is needed:

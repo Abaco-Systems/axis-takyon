@@ -38,9 +38,9 @@ DEBUG_CFLAGS    = -Zi -MDd # -MTd or -MDd
 
 DEBUG_LDFLAGS   = /DEBUG /FIXED:NO /NODEFAULTLIB:MSVCRT
 COMMON_FLAGS    = -nologo -Zm200 -D_CRT_SECURE_NO_WARNINGS=1 -WX -W3 -Zc:wchar_t- -w34189 -GR -EHsc
-CFLAGS          = $(RELEASE_CFLAGS) $(COMMON_FLAGS) -I..\..\inc -I..\..\inc\windows
+CFLAGS          = $(RELEASE_CFLAGS) $(COMMON_FLAGS) -DBUILD_STATIC_LIB -I..\..\inc -I..\..\inc\windows
 TAKYON_C_OBJS   = $(TAKYON_C_FILES:.c=.obj)
-LIBRARY         = Takyon.lib
+LIBRARY         = TakyonStatic.lib
 
 all: $(LIBRARY)
 

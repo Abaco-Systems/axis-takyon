@@ -46,7 +46,7 @@ typedef struct {
   bool connection_failed;
 } SocketPath;
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
@@ -57,7 +57,7 @@ bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uin
   return false;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
@@ -128,7 +128,7 @@ bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_of
   return true;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
@@ -153,7 +153,7 @@ bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   return true;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
@@ -164,7 +164,7 @@ bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret
   return false;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
@@ -315,7 +315,7 @@ static void freePathMemoryResources(TakyonPath *path) {
   free(socket_path);
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknDestroy(TakyonPath *path) {
@@ -363,7 +363,7 @@ bool tknDestroy(TakyonPath *path) {
   return graceful_disconnect_ok;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 static
 #endif
 bool tknCreate(TakyonPath *path) {
@@ -618,7 +618,7 @@ bool tknCreate(TakyonPath *path) {
   return false;
 }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
 void setSocketFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
   private_path->tknSend = tknSend;

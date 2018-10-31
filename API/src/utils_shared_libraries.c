@@ -62,13 +62,15 @@ bool sharedLibraryLoad(const char *interconnect_module, int is_verbose, char *er
   }
 
   // Build the shared object library name
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
   // Nothing to do
+#else
   /*
+#ifdef _WIN32
   char library_name[MAX_FILENAME_CHARS];
   snprintf(library_name, MAX_FILENAME_CHARS, "Takyon%s.dll", interconnect_module);
+#endif
   */
-#else
   char library_name[MAX_FILENAME_CHARS];
   snprintf(library_name, MAX_FILENAME_CHARS, "libTakyon%s.so", interconnect_module);
   char full_library_path[MAX_FILENAME_CHARS];
@@ -85,17 +87,19 @@ bool sharedLibraryLoad(const char *interconnect_module, int is_verbose, char *er
 #endif
 
   // Load the shared library
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
   void *lib_handle = (void *)1;
-  /*
+#else
+  /* DLLs for Windows reference
+#ifdef _WIN32
   HINSTANCE lib_handle = LoadLibrary(full_library_path);
   if (lib_handle == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to load shared library '%s'.\n", full_library_path);
     return false;
   }
+#endif
   */
-#else
   // Load options:
   //   - RTLD_LAZY: If specified, Linux is not concerned about unresolved symbols until they are referenced.
   //   - RTLD_NOW: All unresolved symbols resolved when dlopen() is called.
@@ -133,14 +137,17 @@ bool sharedLibraryUnload(const char *interconnect_module, char *error_message) {
       L_loaded_libraries[i].counter--;
       if (L_loaded_libraries[i].counter == 0) {
         // Un load the library
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
+        // Nothing to do
+#else
         /*
+#ifdef _WIN32
         if (FreeLibrary(L_loaded_libraries[i].library) == 0) {
           TAKYON_RECORD_ERROR(error_message, "ERROR: failed to close dynamic library '%s'\n", L_loaded_libraries[i].name);
           status = false;
         }
+#endif
         */
-#else
         if (dlclose(L_loaded_libraries[i].library) == -1) {
           TAKYON_RECORD_ERROR(error_message, "ERROR: failed to close dynamic library '%s': %s\n", L_loaded_libraries[i].name, dlerror());
           status = false;
@@ -178,7 +185,7 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     return false;
   }
 
-#ifdef _WIN32
+#ifdef BUILD_STATIC_LIB
   if (strcmp(interconnect_module, "Memcpy") == 0) {
     setMemcpyFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "Mmap") == 0) {
@@ -192,7 +199,10 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     TAKYON_RECORD_ERROR(error_message, "Failed to find the functions for the interconnect module '%s'.\n", interconnect_module);
     return false;
   }
-  /*
+
+#else
+  /* reference for Windows
+#ifdef _WIN32
   typedef bool create(TakyonPath *);
   typedef bool send(TakyonPath *, int, uint64_t, uint64_t, uint64_t, bool *);
   typedef bool sendStrided(TakyonPath *, int, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, bool *);
@@ -243,9 +253,9 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'destroy()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
+#endif
   */
 
-#else
   private_path->tknCreate = dlsym(lib_handle, "tknCreate");
   if (private_path->tknCreate == NULL) {
     pthread_mutex_unlock(&L_mutex);

@@ -201,18 +201,27 @@ static bool privateSendStrided(TakyonPath *path, int buffer_index, uint64_t num_
   return true;
 }
 
-static bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
   return privateSendStrided(path, buffer_index, num_blocks, bytes_per_block, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
 }
 
-static bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
   uint64_t num_blocks = 1;
   uint64_t src_stride = 0;
   uint64_t dest_stride = 0;
   return privateSendStrided(path, buffer_index, num_blocks, bytes, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
 }
 
-static bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   MmapPath *mmap_path = (MmapPath *)private_path->private;
   XferBuffer *buffer = &mmap_path->send_buffer_list[buffer_index];
@@ -338,11 +347,17 @@ static bool privateRecv(TakyonPath *path, int buffer_index, uint64_t *num_blocks
   return true;
 }
 
-static bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
   return privateRecv(path, buffer_index, num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret, timed_out_ret);
 }
 
-static bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   uint64_t num_blocks;
   uint64_t stride;
   bool timed_out = false;
@@ -424,7 +439,10 @@ static void free_path_resources(TakyonPath *path, bool disconnect_successful) {
   }
 }
 
-static bool tknDestroy(TakyonPath *path) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknDestroy(TakyonPath *path) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
   MmapPath *mmap_path = (MmapPath *)private_path->private;
 
@@ -494,7 +512,10 @@ static bool tknDestroy(TakyonPath *path) {
   return graceful_disconnect_ok;
 }
 
-static bool tknCreate(TakyonPath *path) {
+#ifdef BUILD_STATIC_LIB
+static
+#endif
+bool tknCreate(TakyonPath *path) {
   // Verify the number of buffers
   if (path->attrs.nbufs_AtoB <= 0) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
@@ -885,6 +906,7 @@ static bool tknCreate(TakyonPath *path) {
   return false;
 }
 
+#ifdef BUILD_STATIC_LIB
 void setMmapFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
   private_path->tknSend = tknSend;
@@ -894,3 +916,4 @@ void setMmapFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknRecvStrided = tknRecvStrided;
   private_path->tknDestroy = tknDestroy;
 }
+#endif
