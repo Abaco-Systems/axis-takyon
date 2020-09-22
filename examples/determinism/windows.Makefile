@@ -12,9 +12,13 @@
 
 TARGET       = determinism.exe
 C_OBJS       = determinism.obj takyon_time.obj takyon_attributes.obj
-CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc -I../../API/inc/windows -I../../extensions
+#PTHREADS_INCLUDE = -I../../API/inc/windows
+PTHREADS_INCLUDE = -Ic:/pthreads4w/install/include
+CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc $(PTHREADS_INCLUDE) -I../../extensions
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
-LIBS         = ../../API/builds/windows_intel_64bit/TakyonStatic.lib Ws2_32.lib
+PTHREADS_LIB = c:/pthreads4w/install/lib/libpthreadVC3.lib /NODEFAULTLIB:LIBCMT.LIB
+#PTHREADS_LIB = c:/pthreads4w/install/lib/libpthreadVC3d.lib /NODEFAULTLIB:LIBCMT.LIB
+LIBS         = ../../API/builds/windows/TakyonStatic.lib Ws2_32.lib $(PTHREADS_LIB)
 
 .SUFFIXES: .c
 

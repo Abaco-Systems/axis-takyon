@@ -32,10 +32,8 @@ Run:
       > ./hello 0 graph_mt.txt
 
     Multi-process:
-      Terminal 1:
-        > ./hello 0 graph_mp.txt
-      Terminal 2:
-        > ./hello 1 graph_mp.txt
+      Terminal 1: > ./hello 0 graph_mp.txt
+      Terminal 2: > ./hello 1 graph_mp.txt
 
   Windows:
     Follow the same as above, but replace "./hello" with "hello"

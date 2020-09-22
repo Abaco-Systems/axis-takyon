@@ -1,25 +1,26 @@
-ThreadGroups
-ThreadGroup: Hello
+Groups
+Group: Hello
   Instances: 2
 
 Processes
 Process: 0
-  Threads: Hello[0]
+  GroupIDs: Hello[0]
 Process: 1
-  Threads: Hello[1]
+  GroupIDs: Hello[1]
 
-MemoryBlocks
+Buffers
 
 Paths
 Defaults
   IsPolling: false, false
   AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
-  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 1, 1
@@ -29,12 +30,14 @@ Defaults
   SenderAddrList: NULL, NULL
   RecverAddrList: NULL, NULL
 Path: 0
-  Thread: Hello[0], Hello[1]
-#  InterconnectA: Mmap -ID 1
-#  InterconnectB: Mmap -ID 1
-#  InterconnectA: Socket -local -ID 1
-#  InterconnectB: Socket -local -ID 1
- InterconnectA: Socket -client 127.0.0.1 -port 12345
- InterconnectB: Socket -server 127.0.0.1 -port 12345 -reuse
+  Endpoints: Hello[0], Hello[1]
+#  InterconnectA: InterProcessMemcpy -ID=1
+#  InterconnectB: InterProcessMemcpy -ID=1
+#  InterconnectA: InterProcessSocket -ID=1
+#  InterconnectB: InterProcessSocket -ID=1
+#  InterconnectA: Socket -client -IP=127.0.0.1 -port=12345
+#  InterconnectB: Socket -server -IP=127.0.0.1 -port=12345 -reuse
+  InterconnectA: Socket -client -IP=127.0.0.1 -ID=1
+  InterconnectB: Socket -server -IP=127.0.0.1 -ID=1
 
-CollectiveGroups
+Collectives

@@ -19,26 +19,22 @@ LDFLAGS        := $(COMMON_FLAGS)
 C_OBJS         := hello.o
 TARGET         := $(APP_NAME)
 
-ifeq ($(OS),Windows_NT)
-    CCFLAGS += -D WIN32
-else
-    UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Linux)
-	PRJ_LIBS := -rdynamic -Wl,--whole-archive -L../../API/builds/linux_intel_64bit -lTakyon -Wl,--no-whole-archive -ldl -lrt
-        ifeq ($(USE_STATIC_LIB),Yes)
-	    PRJ_LIBS := -L../../API/builds/linux_intel_64bit -lTakyonStatic -lrt
-        endif
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    PRJ_LIBS := -rdynamic -Wl,--whole-archive -L../../API/builds/linux -lTakyon -Wl,--no-whole-archive -ldl -lrt
+    ifeq ($(USE_STATIC_LIB),Yes)
+        PRJ_LIBS := -L../../API/builds/linux -lTakyonStatic -lrt
     endif
-    ifeq ($(UNAME_S),Darwin)
-	PRJ_LIBS := -rdynamic -all_load -L../../API/builds/mac_intel_64bit -lTakyon
-        ifeq ($(USE_STATIC_LIB),Yes)
-	    PRJ_LIBS := -L../../API/builds/mac_intel_64bit -lTakyonStatic
-        endif
+    ifeq ($(RDMA),Yes)
+        PRJ_LIBS += -libverbs -lrdmacm -lm
     endif
 endif
-
-# Run with valgrind: valgrind -v --leak-check=yes ./hello "Mmap -ID 1" -endpointA
-# Run with valgrind: valgrind -v --leak-check=full --show-leak-kinds=all ./hello "Mmap -ID 1" -endpointA
+ifeq ($(UNAME_S),Darwin)
+    PRJ_LIBS := -rdynamic -all_load -L../../API/builds/mac -lTakyon
+    ifeq ($(USE_STATIC_LIB),Yes)
+        PRJ_LIBS := -L../../API/builds/mac -lTakyonStatic
+    endif
+endif
 
 all: $(TARGET)
 

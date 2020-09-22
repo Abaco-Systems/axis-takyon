@@ -15,6 +15,8 @@
 //   Unix based OSes, and its memory mapping functionality.
 // -----------------------------------------------------------------------------
 
+#include "takyon_private.h"
+#include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
@@ -24,7 +26,6 @@
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <sys/file.h>
-#include "takyon_private.h"
 
 #define MEMORY_MAP_PREFIX   "/"  // Prefix required by Posix
 
@@ -111,8 +112,11 @@ bool mmapAlloc(const char *map_name, uint64_t bytes, void **addr_ret, MmapHandle
   mmap_handle = (struct _MmapHandle *)calloc(1, sizeof(struct _MmapHandle));
   if (mmap_handle == NULL) {
     TAKYON_RECORD_ERROR(error_message, "Failed to allocate the shared mem handle. Out of memory.\n");
+    munmap(mapped_addr, bytes);
     return false;
   }
+
+  /* Store the map info */
   strncpy(mmap_handle->map_name, full_map_name, MAX_MMAP_NAME_CHARS);
   mmap_handle->is_creator = true;
   mmap_handle->mapped_addr = mapped_addr;

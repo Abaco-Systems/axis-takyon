@@ -43,12 +43,13 @@ TakyonPathAttributes takyonAllocAttributes(bool is_endpointA, bool is_polling, i
   attrs.is_polling             = is_polling;
   attrs.abort_on_failure       = true;
   attrs.verbosity              = TAKYON_VERBOSITY_ERRORS;
-  strncpy(attrs.interconnect, interconnect, MAX_TAKYON_INTERCONNECT_CHARS);
-  attrs.create_timeout         = timeout;
+  strncpy(attrs.interconnect, interconnect, TAKYON_MAX_INTERCONNECT_CHARS);
+  attrs.path_create_timeout    = timeout;
   attrs.send_start_timeout     = timeout;
-  attrs.send_complete_timeout  = timeout;
-  attrs.recv_complete_timeout  = timeout;
-  attrs.destroy_timeout        = timeout;
+  attrs.send_finish_timeout    = timeout;
+  attrs.recv_start_timeout     = timeout;
+  attrs.recv_finish_timeout    = timeout;
+  attrs.path_destroy_timeout   = timeout;
   attrs.send_completion_method = TAKYON_BLOCKING;
   attrs.recv_completion_method = TAKYON_BLOCKING;
   attrs.nbufs_AtoB             = nbufs_AtoB;

@@ -1,32 +1,33 @@
-ThreadGroups
-ThreadGroup: master
+Groups
+Group: parent
   Instances: 1
-ThreadGroup: slaves
+Group: child
   Instances: 4
 
 Processes
 Process: 0
-  Threads: master[0]
+  GroupIDs: parent[0]
 Process: 1
-  Threads: slaves[0] slaves[1]
+  GroupIDs: child[0] child[1]
 Process: 2
-  Threads: slaves[2] slaves[3]
+  GroupIDs: child[2] child[3]
 
-MemoryBlocks
-MemoryBlock: scatterSrc0
+Buffers
+Buffer: scatterSrc0
   ProcessId: 0
   Where: CPU
   Bytes: 4000
-MemoryBlock: scatterSrc1
+Buffer: scatterSrc1
   ProcessId: 0
   Where: CPU
   Bytes: 4000
 # NOTE: Only the gather receive needs to have memory accesible by all 'Mmap' interconnect paths.
-MemoryBlock: gatherDest0
+#       'gatherDest' is the prefix, followed by the buffer index
+Buffer: gatherDest0
   ProcessId: 0
   Where: MMAP
   Bytes: 4000
-MemoryBlock: gatherDest1
+Buffer: gatherDest1
   ProcessId: 0
   Where: MMAP
   Bytes: 4000
@@ -36,11 +37,12 @@ Defaults
   IsPolling: false, false
   AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
-  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 2, 2
@@ -50,34 +52,34 @@ Defaults
   SenderAddrList: NULL NULL, NULL NULL
   RecverAddrList: NULL NULL, NULL NULL
 Path: 0
-  Thread: master[0], slaves[0]
-  InterconnectA: Mmap -ID 1 -app_alloced_recv_mmap
-  InterconnectB: Mmap -ID 1 -remote_mmap_prefix gatherDest
+  Endpoints: parent[0], child[0]
+  InterconnectA: InterProcessMemcpy -ID=1 -appAllocedRecvMmap
+  InterconnectB: InterProcessMemcpy -ID=1 -remoteMmapPrefix=gatherDest
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 1
-  Thread: master[0], slaves[1]
-  InterconnectA: Socket -local -ID 2
-  InterconnectB: Socket -local -ID 2
+  Endpoints: parent[0], child[1]
+  InterconnectA: InterProcessSocket -ID=2
+  InterconnectB: InterProcessSocket -ID=2
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 2
-  Thread: master[0], slaves[2]
-  InterconnectA: Mmap -ID 2 -app_alloced_recv_mmap
-  InterconnectB: Mmap -ID 2 -remote_mmap_prefix gatherDest
+  Endpoints: parent[0], child[2]
+  InterconnectA: InterProcessMemcpy -ID=3 -appAllocedRecvMmap
+  InterconnectB: InterProcessMemcpy -ID=3 -remoteMmapPrefix=gatherDest
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 3
-  Thread: master[0], slaves[3]
-  InterconnectA: Socket -local -ID 4
-  InterconnectB: Socket -local -ID 4
+  Endpoints: parent[0], child[3]
+  InterconnectA: InterProcessSocket -ID=4
+  InterconnectB: InterProcessSocket -ID=4
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 
-CollectiveGroups
-CollectiveGroup: scatter
+Collectives
+Collective: scatter
   Type: SCATTER
   PathSrcIds: 0:A 1:A 2:A 3:A
-CollectiveGroup: gather
+Collective: gather
   Type: GATHER
   PathSrcIds: 0:B 1:B 2:B 3:B

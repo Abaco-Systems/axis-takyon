@@ -1,4 +1,4 @@
-// Copyright 2018 Abaco Systems
+// Copyright 2018,2020 Abaco Systems
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +16,7 @@
 // -----------------------------------------------------------------------------
 
 #include "takyon_private.h"
+#include <stdarg.h>
 
 static void checkFailureReportingMethod(TakyonPathAttributes *attributes, const char *function) {
   // An error occured, so need to see how to handle it
@@ -65,8 +66,8 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     fprintf(stderr, "ERROR in %s(): attributes is NULL\n", __FUNCTION__);
     abort();
   }
-  if (attributes->send_completion_method != TAKYON_BLOCKING && attributes->send_completion_method != TAKYON_USE_SEND_TEST) {
-    fprintf(stderr, "ERROR in %s(): attributes->send_completion_method must be one of TAKYON_BLOCKING or TAKYON_USE_SEND_TEST\n", __FUNCTION__);
+  if (attributes->send_completion_method != TAKYON_BLOCKING && attributes->send_completion_method != TAKYON_USE_IS_SEND_FINISHED) {
+    fprintf(stderr, "ERROR in %s(): attributes->send_completion_method must be one of TAKYON_BLOCKING or TAKYON_USE_IS_SEND_FINISHED\n", __FUNCTION__);
     abort();
   }
   if (attributes->recv_completion_method != TAKYON_BLOCKING) {
@@ -132,15 +133,15 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   clearErrorMessage(attributes->is_endpointA, attributes->error_message);
 
   // Get the interconnect type
-  char interconnect_module[MAX_TAKYON_INTERCONNECT_CHARS];
-  if (!argGet(attributes->interconnect, 0, interconnect_module, MAX_TAKYON_INTERCONNECT_CHARS, attributes->error_message)) {
+  char interconnect_module[TAKYON_MAX_INTERCONNECT_CHARS];
+  if (!argGetInterconnect(attributes->interconnect, interconnect_module, TAKYON_MAX_INTERCONNECT_CHARS, attributes->error_message)) {
     TAKYON_RECORD_ERROR(attributes->error_message, "Failed to get module name from interconnect text\n");
     checkFailureReportingMethod(attributes, __FUNCTION__);
     return NULL;
   }
 
   // Load the shared library for the specified interconnect 
-  if (!sharedLibraryLoad(interconnect_module, attributes->verbosity & TAKYON_VERBOSITY_INIT, attributes->error_message)) {
+  if (!sharedLibraryLoad(interconnect_module, attributes->verbosity & TAKYON_VERBOSITY_CREATE_DESTROY, attributes->error_message)) {
     TAKYON_RECORD_ERROR(attributes->error_message, "Failed to load the Takyon shared library for the interconnect module '%s'.\n", interconnect_module);
     checkFailureReportingMethod(attributes, __FUNCTION__);
     return NULL;
@@ -162,14 +163,15 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     checkFailureReportingMethod(attributes, __FUNCTION__);
     return NULL;
   }
-  path->private = private_path;
+  path->private_path = private_path;
 
   // Convert the timeout values from double (seconds) to int64_t (nanoseconds)
-  private_path->create_timeout_ns        = (int64_t)(attributes->create_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
-  private_path->send_start_timeout_ns    = (int64_t)(attributes->send_start_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
-  private_path->send_complete_timeout_ns = (int64_t)(attributes->send_complete_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
-  private_path->recv_complete_timeout_ns = (int64_t)(attributes->recv_complete_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
-  private_path->destroy_timeout_ns       = (int64_t)(attributes->destroy_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
+  private_path->path_create_timeout_ns  = (int64_t)(attributes->path_create_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
+  private_path->send_start_timeout_ns   = (int64_t)(attributes->send_start_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
+  private_path->send_finish_timeout_ns  = (int64_t)(attributes->send_finish_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
+  private_path->recv_start_timeout_ns   = (int64_t)(attributes->recv_start_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
+  private_path->recv_finish_timeout_ns  = (int64_t)(attributes->recv_finish_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
+  private_path->path_destroy_timeout_ns = (int64_t)(attributes->path_destroy_timeout * NANOSECONDS_PER_SECOND_DOUBLE);
 
   // Get the function pointers from the loaded shared object library
   if (!sharedLibraryGetInterconnectFunctionPointers(interconnect_module, private_path, attributes->error_message)) {
@@ -203,7 +205,7 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     if (path->attrs.recver_max_bytes_list != NULL) free(path->attrs.recver_max_bytes_list);
     if (path->attrs.sender_addr_list != NULL) free(path->attrs.sender_addr_list);
     if (path->attrs.recver_addr_list != NULL) free(path->attrs.recver_addr_list);
-    free(path->private);
+    free(path->private_path);
     free(path);
     checkFailureReportingMethod(attributes, __FUNCTION__);
     return NULL;
@@ -224,7 +226,7 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   }
 
   // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_INIT) {
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY) {
     printf("%-15s (%s:%s) endian=%s, bits=%d, %s\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
@@ -242,7 +244,7 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     free(path->attrs.recver_max_bytes_list);
     free(path->attrs.sender_addr_list);
     free(path->attrs.recver_addr_list);
-    free(path->private);
+    free(path->private_path);
     free(path);
     checkFailureReportingMethod(attributes, __FUNCTION__);
     return NULL;
@@ -252,12 +254,12 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
 }
 
 bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
 
   // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_RUNTIME) {
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV) {
     printf("%-15s (%s:%s) buf=%d, addr=%llu, %lld bytes, soff=%lld, doff=%lld\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
@@ -271,13 +273,18 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
 
   // Error checking
   int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
-  if (buffer_index >= nbufs_sender) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index must be less than %d\n", nbufs_sender);
+  if (nbufs_sender <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonSend() on this path since there are no send buffers defined.\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
-  if (((private_path->send_start_timeout_ns >= 0) || (private_path->send_complete_timeout_ns >= 0)) && (timed_out_ret == NULL)) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "send_start_timeout and/or send_complete_timeout was set, so timed_out_ret must not be NULL\n");
+  if (buffer_index >= nbufs_sender) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index=%d must be less than the number of send buffers=%d\n", buffer_index, nbufs_sender);
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+  if (((private_path->send_start_timeout_ns >= 0) || (private_path->send_finish_timeout_ns >= 0)) && (timed_out_ret == NULL)) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "send_start_timeout and/or send_finish_timeout was set, so timed_out_ret must not be NULL\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
@@ -307,81 +314,13 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
   return ok;
 }
 
-bool takyonSendStrided(TakyonPath *path, int buffer_index, uint64_t num_blocks, uint64_t bytes_per_block, uint64_t src_offset, uint64_t src_stride, uint64_t dest_offset, uint64_t dest_stride, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+bool takyonIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
 
   // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_RUNTIME) {
-    printf("%-15s (%s:%s) buf=%d, num_blocks=%lld, %lld bytes_per_block, soff=%lld, doff=%lld, sstride=%lld, dstride=%lld\n",
-           __FUNCTION__,
-           path->attrs.is_endpointA ? "A" : "B",
-           path->attrs.interconnect,
-           buffer_index,
-           (unsigned long long)num_blocks,
-           (unsigned long long)bytes_per_block,
-           (unsigned long long)src_offset,
-           (unsigned long long)dest_offset,
-           (unsigned long long)src_stride,
-           (unsigned long long)dest_stride);
-  }
-
-  // Error checking
-  int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
-  if (buffer_index >= nbufs_sender) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index must be less than %d\n", nbufs_sender);
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-  if (((private_path->send_start_timeout_ns >= 0) || (private_path->send_complete_timeout_ns >= 0)) && (timed_out_ret == NULL)) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "send_start_timeout and/or send_complete_timeout was set, so timed_out_ret must not be NULL\n");
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-  if (num_blocks>1) {
-    if (src_stride < bytes_per_block) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "Src stride = %lld, must be greater or equal to bytes per block = %lld\n", (unsigned long long)src_stride, (unsigned long long)bytes_per_block);
-      return false;
-    }
-    if (dest_stride < bytes_per_block) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "Dest stride = %lld, must be greater or equal to bytes per block = %lld\n", (unsigned long long)dest_stride, (unsigned long long)bytes_per_block);
-      return false;
-    }
-  }
-  uint64_t max_sender_bytes = path->attrs.sender_max_bytes_list[buffer_index];
-  uint64_t total_bytes = src_offset + num_blocks*bytes_per_block + (num_blocks-1)*src_stride;
-  if (total_bytes > max_sender_bytes) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Exceeding send memory transport bounds: Bounds=%lld bytes but exceeding by %lld bytes\n", (unsigned long long)max_sender_bytes, (unsigned long long)(total_bytes-max_sender_bytes));
-    return false;
-  }
-
-  // Init output values
-  if (timed_out_ret != NULL) *timed_out_ret = false;
-
-  // Initiate the send
-  bool ok = private_path->tknSendStrided(path, buffer_index, num_blocks, bytes_per_block, src_offset, src_stride, dest_offset, dest_stride, timed_out_ret);
-  if (!ok) {
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-
-  // Check for hidden errors
-  if (strlen(path->attrs.error_message) > 0) {
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-
-  return ok;
-}
-
-bool takyonSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
-
-  clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
-
-  // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_RUNTIME) {
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV) {
     printf("%-15s (%s:%s) buf=%d\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
@@ -391,18 +330,23 @@ bool takyonSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
 
   // Error checking
   int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
+  if (nbufs_sender <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonIsSendFinished() on this path since there are no send buffers defined.\n");
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
   if (buffer_index >= nbufs_sender) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index must be less than %d\n", nbufs_sender);
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index=%d must be less than the number of send buffers=%d\n", buffer_index, nbufs_sender);
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
-  if (path->attrs.send_completion_method != TAKYON_USE_SEND_TEST) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "takyon_send_test() cannot be used since the path's send_completion_method is not set to TAKYON_USE_SEND_TEST\n");
+  if (path->attrs.send_completion_method != TAKYON_USE_IS_SEND_FINISHED) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonIsSendFinished() cannot be used since the path's send_completion_method was not set to TAKYON_USE_IS_SEND_FINISHED\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
-  if ((private_path->send_complete_timeout_ns >= 0) && (timed_out_ret == NULL)) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "send_complete_timeout was set, so timed_out_ret must not be NULL\n");
+  if ((private_path->send_finish_timeout_ns >= 0) && (timed_out_ret == NULL)) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "send_finish_timeout was set, so timed_out_ret must not be NULL\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
@@ -411,7 +355,7 @@ bool takyonSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Check for send completion
-  bool ok = private_path->tknSendTest(path, buffer_index, timed_out_ret);
+  bool ok = private_path->tknIsSendFinished(path, buffer_index, timed_out_ret);
   if (!ok) {
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
@@ -427,12 +371,12 @@ bool takyonSendTest(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
 }
 
 bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
 
   // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_RUNTIME) {
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV) {
     printf("%-15s (%s:%s) buf=%d. Waiting for data\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
@@ -442,20 +386,27 @@ bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_
 
   // Error checking
   int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  if (buffer_index >= nbufs_recver) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index must be less than %d\n", nbufs_recver);
+  if (nbufs_recver <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonRecv() on this path since there are no recv buffers defined.\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
-  // NOTE: num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret are allowed to be NULL
-  if ((private_path->recv_complete_timeout_ns >= 0) && (timed_out_ret == NULL)) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "A timeout was set, so timed_out_ret must not be NULL\n");
+  if (buffer_index >= nbufs_recver) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index=%d must be less than the number of recv buffers=%d\n", buffer_index, nbufs_recver);
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+  // NOTE: bytes_ret and offset_ret are allowed to be NULL, where timed_out_ret is only allowed to be NULL if the associated timeouts are TAKYON_WAIT_FOREVER
+  if (((private_path->recv_start_timeout_ns >= 0) || (private_path->recv_finish_timeout_ns >= 0)) && (timed_out_ret == NULL)) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "recv_start_timeout and/or recv_finish_timeout was set, so timed_out_ret must not be NULL\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
 
   // Init output values
   if (timed_out_ret != NULL) *timed_out_ret = false;
+  if (bytes_ret != NULL) *bytes_ret = 0;
+  if (offset_ret != NULL) *offset_ret = 0;
 
   bool ok = private_path->tknRecv(path, buffer_index, bytes_ret, offset_ret, timed_out_ret);
   if (!ok) {
@@ -472,60 +423,14 @@ bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_
   return ok;
 }
 
-bool takyonRecvStrided(TakyonPath *path, int buffer_index, uint64_t *num_blocks_ret, uint64_t *bytes_per_block_ret, uint64_t *offset_ret, uint64_t *stride_ret, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
-
-  clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
-
-  // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_RUNTIME) {
-    printf("%-15s (%s:%s) buf=%d. Waiting for data\n",
-           __FUNCTION__,
-           path->attrs.is_endpointA ? "A" : "B",
-           path->attrs.interconnect,
-           buffer_index);
-  }
-
-  // Error checking
-  int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  if (buffer_index >= nbufs_recver) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index must be less than %d\n", nbufs_recver);
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-  // NOTE: num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret are allowed to be NULL
-  if ((private_path->recv_complete_timeout_ns >= 0) && (timed_out_ret == NULL)) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "A timeout was set, so timed_out_ret must not be NULL\n");
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-
-  // Init output values
-  if (timed_out_ret != NULL) *timed_out_ret = false;
-
-  bool ok = private_path->tknRecvStrided(path, buffer_index, num_blocks_ret, bytes_per_block_ret, offset_ret, stride_ret, timed_out_ret);
-  if (!ok) {
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-
-  // Check for hidden errors
-  if (strlen(path->attrs.error_message) > 0) {
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-
-  return ok;
-}
-
 char *takyonDestroy(TakyonPath **path_ret) {
   TakyonPath *path = *path_ret;
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private;
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
 
   // Verbosity
-  if (path->attrs.verbosity & TAKYON_VERBOSITY_INIT) {
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY) {
     printf("%-15s (%s:%s)\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
@@ -538,8 +443,8 @@ char *takyonDestroy(TakyonPath **path_ret) {
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
   } else {
     // Get the interconnect type
-    char interconnect_module[MAX_TAKYON_INTERCONNECT_CHARS];
-    ok = argGet(path->attrs.interconnect, 0, interconnect_module, MAX_TAKYON_INTERCONNECT_CHARS, path->attrs.error_message);
+    char interconnect_module[TAKYON_MAX_INTERCONNECT_CHARS];
+    ok = argGetInterconnect(path->attrs.interconnect, interconnect_module, TAKYON_MAX_INTERCONNECT_CHARS, path->attrs.error_message);
     if (!ok) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get module name from interconnect text\n");
       checkFailureReportingMethod(&path->attrs, __FUNCTION__);
@@ -565,7 +470,7 @@ char *takyonDestroy(TakyonPath **path_ret) {
   free(path->attrs.recver_max_bytes_list);
   free(path->attrs.sender_addr_list);
   free(path->attrs.recver_addr_list);
-  free(path->private);
+  free(path->private_path);
   free(path);
 
   *path_ret = NULL;

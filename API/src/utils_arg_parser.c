@@ -1,4 +1,4 @@
-// Copyright 2018 Abaco Systems
+// Copyright 2018,2020 Abaco Systems
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,143 +19,101 @@
 #include "takyon_private.h"
 
 // This is a simple parse with a few requirements
-//  - Args are separate by a single space
-//  - First arg does not start with a minus
+//  - Args are separate by a single space: spaces are not allowed in values
+//  - First arg does not start with a minus: this should be the interconnect name
 //  - Flags are always the form " -<named_flag>"
-//  - named args with values are always the format: " -<arg_name> <value>"
-//  - Full example: "socket -IP 192.168.0.21 -port 23454"
+//  - Named args with values are always the format: " -<arg_name>=<value>"
+//  - Full example: "socket -IP=192.168.0.21 -port=23454"
 
-static int argCount(const char *arguments) {
-  int count = 1;
-  const char *space_ptr = strchr(arguments, ' ');
+static bool getArgWithName(const char *arguments, const char *key, bool is_prefix, bool *found_ret, char *result, const int max_chars, char *error_message) {
+  // Skip any leading spaces
+  while (arguments[0] == ' ') arguments++;
+
+  // Scan all arguments
+  const char *space_ptr = strchr(arguments, ' '); // Skipping first argument
   while (space_ptr != NULL) {
-    count++;
+    // Skip any leading spaces
+    while (space_ptr[0] == ' ') space_ptr++;
+    if (space_ptr[0] == '\0') break;
+ 
+    // Found an arg, copy it to the temp pointer
+    int index = 0;
+    while (space_ptr[index] != ' ' && space_ptr[index] != '\0' && index < (max_chars-1)) {
+      result[index] = space_ptr[index];
+      index++;
+    }
+    result[index] = '\0';
+
+    // See if it's the correct key=value
+    if (is_prefix && strncmp(key, result, strlen(key))==0) {
+      // Found the prefix.
+      *found_ret = true;
+      // Verify value exists for the key
+      if (strlen(key) == strlen(result)) {
+        if (error_message != NULL) TAKYON_RECORD_ERROR(error_message, "Argument '%s' missing its value in argument list '%s'\n", key, arguments);
+        return false;
+      }
+      // Get the value
+      int index2 = (int)strlen(key);
+      index = 0;
+      while (result[index2] != '\0') {
+        result[index] = result[index2];
+        index++;
+        index2++;
+      }
+      result[index] = '\0';
+      return true;
+    }
+
+    // See if it's the correct flag
+    if (!is_prefix && strcmp(key, result)==0) {
+      // Found the flag
+      *found_ret = true;
+      return true;
+    }
+
+    // Continue looking
     space_ptr++;
     space_ptr = strchr(space_ptr, ' ');
   }
-  return count;
+
+  *found_ret = false;
+  return true;
 }
 
-static const char *argPointer(const char *arguments, const int index) {
-  const int arg_count = argCount(arguments);
-  if (index >= arg_count) return NULL;
-  const char *arg_ptr = arguments;
-  for (int i=0; i<index; i++) {
-    arg_ptr = strchr(arg_ptr, ' ');
-    arg_ptr++;
+bool argGetInterconnect(const char *arguments, char *result, const int max_chars, char *error_message) {
+  // Skip any leading spaces
+  while (arguments[0] == ' ') arguments++;
+  // Copy first argument
+  int index = 0;
+  while (arguments[index] != ' ' && arguments[index] != '\0' && index < (max_chars-1)) {
+    result[index] = arguments[index];
+    index++;
   }
-  return arg_ptr;
-}
-
-static const char *endOfArg(const char *arg) {
-  const char *end = arg;
-  while ((*end != ' ') && (*end != '\0')) {
-    end++;
-  }
-  if (arg == end) return NULL;
-  return end;
-}
-
-static int argLength(const char *arg_start) {
-  const char *arg_end = endOfArg(arg_start);
-  if (arg_end == NULL) return 0;
-  int num_chars = (int)(arg_end - arg_start);
-  return num_chars;
-}
-
-static const char *argByName(const char *arguments, const char *name) {
-  const int name_length = (int)strlen(name);
-  const int arg_count = argCount(arguments);
-  for (int i=1; i<arg_count; i++) {
-    const char *arg_start = argPointer(arguments, i);
-    int num_chars = 0;
-    if (arg_start != NULL) {
-      num_chars = argLength(arg_start);
-    }
-    if (num_chars == name_length) {
-      // Found the correct size arg, so see if the characters are all the same
-      bool matched = true;
-      for (int j=0; j<name_length; j++) {
-        if (arg_start[j] != name[j]) {
-          matched = false;
-          break;
-        }
-      }
-      if (matched) {
-        return arg_start;
-      }
-    }
-  }
-  return NULL;
-}
-
-bool argGet(const char *arguments, const int index, char *result, const int max_chars, char *error_message) {
-  const char *arg_start = argPointer(arguments, index);
-  if (arg_start == NULL) {
-    TAKYON_RECORD_ERROR(error_message, "Index=%d out of range, not enough arguments.\n", index);
+  result[index] = '\0';
+  if (strlen(result) == 0) {
+    TAKYON_RECORD_ERROR(error_message, "No interconnect specified.\n");
     return false;
   }
-  int num_chars = argLength(arg_start);
-  if (num_chars >= max_chars) {
-    TAKYON_RECORD_ERROR(error_message, "Not enough chars to hold text. Max chars=%d, needed chars=%d, args='%s'\n", max_chars, num_chars, arguments);
-    return false;
-  }
-
-  for (int i=0; i<num_chars; i++) {
-    result[i] = arg_start[i];
-  }
-  result[num_chars] = '\0';
-
   return true;
 }
 
 bool argGetFlag(const char *arguments, const char *name) {
-  const char *arg_start = argByName(arguments, name);
-  if (arg_start != NULL) {
-    return true;
-  }
-  return false;
+  bool found = false;
+  char value_text[TAKYON_MAX_INTERCONNECT_CHARS];
+  if (!getArgWithName(arguments, name, false, &found, value_text, TAKYON_MAX_INTERCONNECT_CHARS, NULL)) return false;
+  return found;
 }
 
 bool argGetText(const char *arguments, const char *name, char *result, const int max_chars, bool *found_ret, char *error_message) {
-  *found_ret = false;
-  const char *arg_start = argByName(arguments, name);
-  if (arg_start == NULL) {
-    return true;
-  }
-  // Find the value text
-  const char *value_ptr = strchr(arg_start, ' ');
-  if (value_ptr == NULL) {
-    TAKYON_RECORD_ERROR(error_message, "Arg '%s' missing its value in argument list '%s'\n", name, arguments);
-    return false;
-  }
-  while (*value_ptr == ' ') value_ptr++;
-  // Get the length of the value text
-  int num_chars = argLength(value_ptr);
-  if (num_chars == 0) {
-    TAKYON_RECORD_ERROR(error_message, "Arg '%s' missing its value in argument list '%s'\n", name, arguments);
-    return false;
-  }
-  if (num_chars >= max_chars) {
-    TAKYON_RECORD_ERROR(error_message, "Not enough chars to hold text. Max chars=%d, needed chars=%d, args='%s'\n", max_chars, num_chars, arguments);
-    return false;
-  }
-  // Copy the value text to the result
-  for (int i=0; i<num_chars; i++) {
-    result[i] = value_ptr[i];
-  }
-  result[num_chars] = '\0';
-
-  *found_ret = true;
+  if (!getArgWithName(arguments, name, true, found_ret, result, max_chars, error_message)) return false;
+  if (!(*found_ret)) return true; // Argument not found
   return true;
 }
 
 bool argGetInt(const char *arguments, const char *name, int *result, bool *found_ret, char *error_message) {
-  char value_text[MAX_TAKYON_INTERCONNECT_CHARS];
-  if (!argGetText(arguments, name, value_text, MAX_TAKYON_INTERCONNECT_CHARS, found_ret, error_message)) {
-    TAKYON_RECORD_ERROR(error_message, "Failed to get int value for arg '%s'.\n", name);
-    return false;
-  }
+  char value_text[TAKYON_MAX_INTERCONNECT_CHARS];
+  if (!getArgWithName(arguments, name, true, found_ret, value_text, TAKYON_MAX_INTERCONNECT_CHARS, error_message)) return false;
   if (!(*found_ret)) return true; // Argument not found
   int tokens = sscanf(value_text, "%d", result);
   if (tokens != 1) {
@@ -165,12 +123,21 @@ bool argGetInt(const char *arguments, const char *name, int *result, bool *found
   return true;
 }
 
-bool argGetFloat(const char *arguments, const char *name, float *result, bool *found_ret, char *error_message) {
-  char value_text[MAX_TAKYON_INTERCONNECT_CHARS];
-  if (!argGetText(arguments, name, value_text, MAX_TAKYON_INTERCONNECT_CHARS, found_ret, error_message)) {
-    TAKYON_RECORD_ERROR(error_message, "Failed to get float value for arg '%s'.\n", name);
+bool argGetUInt(const char *arguments, const char *name, uint32_t *result, bool *found_ret, char *error_message) {
+  char value_text[TAKYON_MAX_INTERCONNECT_CHARS];
+  if (!getArgWithName(arguments, name, true, found_ret, value_text, TAKYON_MAX_INTERCONNECT_CHARS, error_message)) return false;
+  if (!(*found_ret)) return true; // Argument not found
+  int tokens = sscanf(value_text, "%u", result);
+  if (tokens != 1) {
+    TAKYON_RECORD_ERROR(error_message, "Value for arg '%s' is not an unsigned int: '%s'.\n", name, value_text);
     return false;
   }
+  return true;
+}
+
+bool argGetFloat(const char *arguments, const char *name, float *result, bool *found_ret, char *error_message) {
+  char value_text[TAKYON_MAX_INTERCONNECT_CHARS];
+  if (!getArgWithName(arguments, name, true, found_ret, value_text, TAKYON_MAX_INTERCONNECT_CHARS, error_message)) return false;
   if (!(*found_ret)) return true; // Argument not found
   int tokens = sscanf(value_text, "%f", result);
   if (tokens != 1) {

@@ -22,11 +22,11 @@ static void vector_max(uint64_t nelements, void *a, void *b) {
 }
 
 void reduceTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles, bool scatter_result) {
-  int tree_index = takyonGetThreadGroupInstance(graph, thread_info->id);
-  TakyonThreadGroup *thread_group = takyonGetThreadGroup(graph, thread_info->id);
-  int tree_instances = thread_group->instances;
-  TakyonCollectiveBarrier *barrier = takyonGetBarrier(graph, "barrier", thread_info->id);
-  TakyonCollectiveReduce *reduce = takyonGetReduce(graph, "reduce", thread_info->id);
+  int tree_index = takyonGetGroupInstance(graph, thread_info->group_id);
+  TakyonGroup *group = takyonGetGroup(graph, thread_info->group_id);
+  int tree_instances = group->instances;
+  TakyonCollectiveBarrier *barrier = takyonGetBarrier(graph, "barrier", thread_info->group_id);
+  TakyonCollectiveReduce *reduce = takyonGetReduce(graph, "reduce", thread_info->group_id);
   int reduce_buffer = 0;
   int barrier_buffer = 1;
   bool is_tree_root = (tree_index == 0);

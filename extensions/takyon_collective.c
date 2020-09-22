@@ -381,9 +381,9 @@ void takyonScatterSend(TakyonScatterSrc *collective, int buffer, uint64_t *nbyte
   }
   // If non blocking, then wait for completion
   for (int i=0; i<collective->npaths; i++) {
-    if (collective->path_list[i]->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
+    if (collective->path_list[i]->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
       bool timed_out;
-      bool ok = takyonSendTest(collective->path_list[i], buffer, &timed_out);
+      bool ok = takyonIsSendFinished(collective->path_list[i], buffer, &timed_out);
       if (ok && timed_out) {
         fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
         exit(EXIT_FAILURE);
@@ -486,8 +486,8 @@ void takyonGatherSend(TakyonGatherSrc *collective, int buffer, uint64_t nbytes, 
     exit(EXIT_FAILURE);
   }
   // If non blocking, then wait for completion
-  if (collective->path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
-    ok = takyonSendTest(collective->path, buffer, &timed_out);
+  if (collective->path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
+    ok = takyonIsSendFinished(collective->path, buffer, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);

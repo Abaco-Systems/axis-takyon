@@ -24,9 +24,9 @@ Run:
     To see the usage options:
       > ./hello
 
-    Multi threaded (test variations that include both endpoints):
-      > ./hello "Memcpy -ID 1"
-      > ./hello "Memcpy -ID 1 -share"
+    Test variations:
+      > ./hello "InterThreadMemcpy -ID=1"
+      > ./hello "InterThreadPointer -ID=1"
 
   Windows:
     Follow the same as above, but replace "./hello" with "hello"

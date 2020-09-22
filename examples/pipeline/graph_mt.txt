@@ -1,23 +1,24 @@
-ThreadGroups
-ThreadGroup: pipe
+Groups
+Group: pipe
   Instances: 5
 
 Processes
 Process: 0
-  Threads: pipe[0] pipe[1] pipe[2] pipe[3] pipe[4]
+  GroupIDs: pipe[0] pipe[1] pipe[2] pipe[3] pipe[4]
 
-MemoryBlocks
+Buffers
 
 Paths
 Defaults
   IsPolling: false, false
   AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
-  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 2, 2
@@ -27,23 +28,23 @@ Defaults
   SenderAddrList: NULL NULL, NULL
   RecverAddrList: NULL, NULL NULL
 Path: 0
-  Thread: pipe[0], pipe[1]
-  InterconnectA: Memcpy -ID 1
-  InterconnectB: Memcpy -ID 1
+  Endpoints: pipe[0], pipe[1]
+  InterconnectA: InterThreadMemcpy -ID=1
+  InterconnectB: InterThreadMemcpy -ID=1
 Path: 1
-  Thread: pipe[1], pipe[2]
-  InterconnectA: Memcpy -ID 2
-  InterconnectB: Memcpy -ID 2
+  Endpoints: pipe[1], pipe[2]
+  InterconnectA: InterThreadMemcpy -ID=2
+  InterconnectB: InterThreadMemcpy -ID=2
 Path: 2
-  Thread: pipe[2], pipe[3]
-  InterconnectA: Memcpy -ID 3
-  InterconnectB: Memcpy -ID 3
+  Endpoints: pipe[2], pipe[3]
+  InterconnectA: InterThreadMemcpy -ID=3
+  InterconnectB: InterThreadMemcpy -ID=3
 Path: 3
-  Thread: pipe[3], pipe[4]
-  InterconnectA: Memcpy -ID 4
-  InterconnectB: Memcpy -ID 4
+  Endpoints: pipe[3], pipe[4]
+  InterconnectA: InterThreadMemcpy -ID=4
+  InterconnectB: InterThreadMemcpy -ID=4
 
-CollectiveGroups
-CollectiveGroup: pipeline
+Collectives
+Collective: pipeline
   Type: ONE2ONE
   PathSrcIds: 0:A 1:A 2:A 3:A

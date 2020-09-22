@@ -16,9 +16,9 @@ static TakyonGraph *L_graph = NULL;
 
 static void *thread_entry_function(void *user_data) {
   TakyonThread *thread_info = (TakyonThread *)user_data;
-  takyonCreateGraphPaths(L_graph, thread_info->id);
+  takyonCreateGroupPaths(L_graph, thread_info->group_id);
   helloTask(L_graph, thread_info);
-  takyonDestroyGraphPaths(L_graph, thread_info->id);
+  takyonDestroyGroupPaths(L_graph, thread_info->group_id);
   return NULL;
 }
 

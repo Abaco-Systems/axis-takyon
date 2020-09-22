@@ -50,18 +50,13 @@ Run:
       > ./pipeline
 
     One process, multiple threads:
-      Terminal 1:
-        > ./pipeline 0 graph_mt.txt
+      > ./pipeline 0 graph_mt.txt
 
     All in one OS, multiple processes and multiple threads:
-      Terminal 1:
-        > ./pipeline 0 graph_mp.txt
-      Terminal 2:
-        > ./pipeline 1 graph_mp.txt
-      Terminal 3:
-        > ./pipeline 2 graph_mp.txt
-      Terminal 4:
-        > ./pipeline 3 graph_mp.txt
+      Terminal 1: > ./pipeline 0 graph_mp.txt
+      Terminal 2: > ./pipeline 1 graph_mp.txt
+      Terminal 3: > ./pipeline 2 graph_mp.txt
+      Terminal 4: > ./pipeline 3 graph_mp.txt
 
   Windows:
     Follow the same as above, but replace "./pipeline" with "pipeline"

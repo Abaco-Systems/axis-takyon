@@ -18,6 +18,9 @@
 // -----------------------------------------------------------------------------
 
 #include "takyon_private.h"
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <sys/timeb.h>
 
 void clockSleep(int64_t microseconds) {
   if (microseconds >= 0) {

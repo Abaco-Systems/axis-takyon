@@ -18,11 +18,11 @@ static TakyonGraph *L_graph = NULL;
 static void *thread_entry_function(void *user_data) {
   TakyonThread *thread_info = (TakyonThread *)user_data;
   // Create Takyon paths
-  takyonCreateGraphPaths(L_graph, thread_info->id);
+  takyonCreateGroupPaths(L_graph, thread_info->group_id);
   // Run correct thread
   barrierTask(L_graph, thread_info, L_ncycles);
   // Destroy Takyon paths
-  takyonDestroyGraphPaths(L_graph, thread_info->id);
+  takyonDestroyGroupPaths(L_graph, thread_info->group_id);
   return NULL;
 }
 

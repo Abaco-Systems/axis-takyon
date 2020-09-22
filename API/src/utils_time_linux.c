@@ -17,9 +17,8 @@
 //     - get wall clock time
 // -----------------------------------------------------------------------------
 
-#include <time.h>
-#include <sched.h>
 #include "takyon_private.h"
+#include <sys/time.h>
 
 void clockSleep(int64_t microseconds) {
   if (microseconds >= 0) {

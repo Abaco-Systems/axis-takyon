@@ -1,4 +1,4 @@
-// Copyright 2018 Abaco Systems
+// Copyright 2018,2020 Abaco Systems
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,6 +21,12 @@
 // -----------------------------------------------------------------------------
 
 #include "takyon_private.h"
+#ifdef __linux__
+  #include <dlfcn.h>
+#endif
+#ifdef __APPLE__
+  #include <dlfcn.h>
+#endif
 
 typedef struct {
   char name[MAX_FILENAME_CHARS];
@@ -186,14 +192,40 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
   }
 
 #ifdef BUILD_STATIC_LIB
-  if (strcmp(interconnect_module, "Memcpy") == 0) {
-    setMemcpyFunctionPointers(private_path);
-  } else if (strcmp(interconnect_module, "Mmap") == 0) {
-    setMmapFunctionPointers(private_path);
+  if (strcmp(interconnect_module, "InterThreadMemcpy") == 0) {
+    setInterThreadMemcpyFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "InterThreadPointer") == 0) {
+    setInterThreadPointerFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "InterProcessMemcpy") == 0) {
+    setInterProcessMemcpyFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "InterProcessPointer") == 0) {
+    setInterProcessPointerFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "InterProcessSocket") == 0) {
+    setInterProcessSocketFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "Socket") == 0) {
     setSocketFunctionPointers(private_path);
-  } else if (strcmp(interconnect_module, "SocketDatagram") == 0) {
-    setSocketDatagramFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "OneSidedSocket") == 0) {
+    setOneSidedSocketFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "UnicastSendSocket") == 0) {
+    setUnicastSendSocketFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "UnicastRecvSocket") == 0) {
+    setUnicastRecvSocketFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "MulticastSendSocket") == 0) {
+    setMulticastSendSocketFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "MulticastRecvSocket") == 0) {
+    setMulticastRecvSocketFunctionPointers(private_path);
+#ifdef BUILD_RDMA
+  } else if (strcmp(interconnect_module, "Rdma") == 0) {
+    setRdmaFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "UnicastSendRdma") == 0) {
+    setUnicastSendRdmaFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "UnicastRecvRdma") == 0) {
+    setUnicastRecvRdmaFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "MulticastSendRdma") == 0) {
+    setMulticastSendRdmaFunctionPointers(private_path);
+  } else if (strcmp(interconnect_module, "MulticastRecvRdma") == 0) {
+    setMulticastRecvRdmaFunctionPointers(private_path);
+#endif
   } else {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the functions for the interconnect module '%s'.\n", interconnect_module);
@@ -203,51 +235,37 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
 #else
   /* reference for Windows
 #ifdef _WIN32
-  typedef bool create(TakyonPath *);
-  typedef bool send(TakyonPath *, int, uint64_t, uint64_t, uint64_t, bool *);
-  typedef bool sendStrided(TakyonPath *, int, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, bool *);
-  typedef bool sendTest(TakyonPath *, int, bool *);
-  typedef bool recv(TakyonPath *, int, uint64_t *, uint64_t *, bool *);
-  typedef bool recvStrided(TakyonPath *, int, uint64_t *, uint64_t *, uint64_t *, uint64_t *, bool *);
-  typedef bool destroy(TakyonPath *);
+  typedef bool tknCreate(TakyonPath *);
+  typedef bool tknSend(TakyonPath *, int, uint64_t, uint64_t, uint64_t, bool *);
+  typedef bool tknIsSendFinished(TakyonPath *, int, bool *);
+  typedef bool tknRecv(TakyonPath *, int, uint64_t *, uint64_t *, bool *);
+  typedef bool tknDestroy(TakyonPath *);
 
-  private_path->tknCreate = (create *)GetProcAddress(lib_handle, "tknCreate");
+  private_path->tknCreate = (tknCreate *)GetProcAddress(lib_handle, "tknCreate");
   if (private_path->tknCreate == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'create()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
-  private_path->tknSend = (send *)GetProcAddress(lib_handle, "tknSend");
+  private_path->tknSend = (tknSend *)GetProcAddress(lib_handle, "tknSend");
   if (private_path->tknSend == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'send()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
-  private_path->tknSendStrided = (sendStrided *)GetProcAddress(lib_handle, "tknSendStrided");
-  if (private_path->tknSendStrided == NULL) {
+  private_path->tknIsSendFinished = (tknIsSendFinished *)GetProcAddress(lib_handle, "tknIsSendFinished");
+  if (private_path->tknIsSendFinished == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'sendStrided()' in interconnect module '%s'.\n", interconnect_module);
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknIsSendFinished()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
-  private_path->tknSendTest = (sendTest *)GetProcAddress(lib_handle, "tknSendTest");
-  if (private_path->tknSendTest == NULL) {
-    pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'sendTest()' in interconnect module '%s'.\n", interconnect_module);
-    return false;
-  }
-  private_path->tknRecv = (recv *)GetProcAddress(lib_handle, "tknRecv");
+  private_path->tknRecv = (tknRecv *)GetProcAddress(lib_handle, "tknRecv");
   if (private_path->tknRecv == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'recv()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
-  private_path->tknRecvStrided = (recvStrided *)GetProcAddress(lib_handle, "tknRecvStrided");
-  if (private_path->tknRecvStrided == NULL) {
-    pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'recvStrided()' in interconnect module '%s'.\n", interconnect_module);
-    return false;
-  }
-  private_path->tknDestroy = (destroy *)GetProcAddress(lib_handle, "tknDestroy");
+  private_path->tknDestroy = (tknDestroy *)GetProcAddress(lib_handle, "tknDestroy");
   if (private_path->tknDestroy == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'destroy()' in interconnect module '%s'.\n", interconnect_module);
@@ -259,37 +277,25 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
   private_path->tknCreate = dlsym(lib_handle, "tknCreate");
   if (private_path->tknCreate == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'create()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknCreate()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
   private_path->tknSend = dlsym(lib_handle, "tknSend");
   if (private_path->tknSend == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'send()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknSend()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
-  private_path->tknSendStrided = dlsym(lib_handle, "tknSendStrided");
-  if (private_path->tknSendStrided == NULL) {
+  private_path->tknIsSendFinished = dlsym(lib_handle, "tknIsSendFinished");
+  if (private_path->tknIsSendFinished == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'sendStrided()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
-    return false;
-  }
-  private_path->tknSendTest = dlsym(lib_handle, "tknSendTest");
-  if (private_path->tknSendTest == NULL) {
-    pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'sendTest()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknIsSendFinished()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
   private_path->tknRecv = dlsym(lib_handle, "tknRecv");
   if (private_path->tknRecv == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'recv()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
-    return false;
-  }
-  private_path->tknRecvStrided = dlsym(lib_handle, "tknRecvStrided");
-  if (private_path->tknRecvStrided == NULL) {
-    pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'recvStrided()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
   private_path->tknDestroy = dlsym(lib_handle, "tknDestroy");

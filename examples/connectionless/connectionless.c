@@ -24,28 +24,25 @@ int main(int argc, char **argv) {
   bool     is_polling      = false;
   bool     is_endpointA    = false;
   int      nbufs           = 2;
-  uint64_t datagram_bytes  = 1024; // Must be at least 4, but <= the networks datagram size
+  uint64_t datagram_bytes  = 1024; // Must be at least 4, but <= the networks datagram size (for RDMA this will be the MTU size which is automatically detected)
   bool     simulate_delays = false;
 
   if (argc < 2) {
     printf("Usage: connectionless <interconnect_spec> [options]\n");
     printf("  Options:\n");
-    printf("    -endpointA      This process is marked as endpoint A (default is endpoint B)\n");
     printf("    -poll           Enable polling communication (default is event driven)\n");
     printf("    -simulateDelays Simulate random delays before each send, to force dropped datagrams\n");
     printf("    -bytes          The number of bytes to transfer in the datagram (default is %lld)\n", (long long)datagram_bytes);
     printf("    -nbufs          The number of buffers (default is %d)\n", nbufs);
+    printf("    -endpointA      Set as endpoint A (default is endpoint B)\n");
     return 1;
   }
 
   // Check command line args
-  const char *interconnect = argv[1];
   int index = 2;
   while (index < argc) {
     if (strcmp(argv[index], "-poll") == 0) {
       is_polling = true;
-    } else if (strcmp(argv[index], "-endpointA") == 0) {
-      is_endpointA = true;
     } else if (strcmp(argv[index], "-simulateDelays") == 0) {
       simulate_delays = true;
     } else if (strcmp(argv[index], "-bytes") == 0) {
@@ -54,11 +51,14 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[index], "-nbufs") == 0) {
       index++;
       nbufs = atoi(argv[index]);
+    } else if (strcmp(argv[index], "-endpointA") == 0) {
+      is_endpointA = true;
     }
     index++;
   }
 
   // Print some startup info
+  const char *interconnect = argv[1];
   printf("Attributes:\n");
   printf("  endpoint:        \"%s\"\n", is_endpointA ? "A" : "B");
   printf("  interconnect:    \"%s\"\n", interconnect);
@@ -68,7 +68,8 @@ int main(int argc, char **argv) {
   printf("  nbufs:           %d\n", nbufs);
 
   // Create connection
-  TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, is_polling, nbufs, 0, datagram_bytes, TAKYON_WAIT_FOREVER, interconnect);
+  uint64_t datagram_header_bytes = 40; // RDMA requires these extra bytes to provide the datagram header only on the receiver side
+  TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, is_polling, nbufs, 0, datagram_bytes+datagram_header_bytes, TAKYON_WAIT_FOREVER, interconnect);
   TakyonPath *path = takyonCreate(&attrs);
   takyonFreeAttributes(attrs);
 
@@ -90,15 +91,17 @@ int main(int argc, char **argv) {
       takyonSend(path, buffer, datagram_bytes, 0, 0, NULL);
       if (time_to_print) printf("Sent %d messages\n", xfer_count);
     } else {
+      // Receiver
       // Sleep a random amount of time to force dropped packages
       if (simulate_delays) {
         double max_seconds = 0.0001;
         randomSleep(max_seconds);
       }
       // Wait for a message
-      takyonRecv(path, buffer, NULL, NULL, NULL);
+      uint64_t offset; // IMPORTANT: When using RDMA, the offset will not be zero due to the datagram header
+      takyonRecv(path, buffer, NULL, &offset, NULL);
       // Get the expected xfer count
-      int *message = (int *)path->attrs.recver_addr_list[buffer];
+      int *message = (int *)(path->attrs.recver_addr_list[buffer] + offset);
       int expected_xfer_count = message[0];
       // Print some stats
       int dropped_count = expected_xfer_count - xfer_count;

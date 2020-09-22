@@ -36,30 +36,35 @@ Run:
       > ./fault_tolerant
 
     Multi threaded (test variations that include both endpoints):
-      > ./fault_tolerant "Memcpy -ID 1" -mt -simulateDelays
-      > ./fault_tolerant "Memcpy -ID 1" -mt -simulateDelays -poll
-      > ./fault_tolerant "Memcpy -ID 1 -share" -mt -simulateDelays
-      > ./fault_tolerant "Memcpy -ID 1 -share" -mt -simulateDelays -poll
+      > ./fault_tolerant "InterThreadMemcpy -ID=1" -mt -simulateDelays
+      > ./fault_tolerant "InterThreadMemcpy -ID=1" -mt -simulateDelays -poll
+      > ./fault_tolerant "InterThreadPointer -ID=1" -mt -simulateDelays
+      > ./fault_tolerant "InterThreadPointer -ID=1" -mt -simulateDelays -poll
 
     Multi process:
-      Terminal 1 (endpoint A test variations, to match with endpoint B):
-        > ./fault_tolerant "Mmap -ID 1" -errors -endpointA
-        > ./fault_tolerant "Mmap -ID 1" -errors -endpointA -poll
-        > ./fault_tolerant "Mmap -ID 1 -share" -errors -endpointA
-        > ./fault_tolerant "Mmap -ID 1 -share" -errors -endpointA -poll
-        > ./fault_tolerant "Socket -local -ID 1" -errors -endpointA
-        > ./fault_tolerant "Socket -local -ID 1" -errors-endpointA -poll
-        > ./fault_tolerant "Socket -client 127.0.0.1 -port 12345" -errors -endpointA
-        > ./fault_tolerant "Socket -client 127.0.0.1 -port 12345" -errors -endpointA -poll
-      Terminal 2 (endpoint B test variations, to match with endpoint A):
-        > ./fault_tolerant "Mmap -ID 1" -errors
-        > ./fault_tolerant "Mmap -ID 1" -errors -poll
-        > ./fault_tolerant "Mmap -ID 1 -share" -errors
-        > ./fault_tolerant "Mmap -ID 1 -share" -errors -poll
-        > ./fault_tolerant "Socket -local -ID 1 -reuse" -errors
-        > ./fault_tolerant "Socket -local -ID 1 -reuse" -errors -poll
-        > ./fault_tolerant "Socket -server 127.0.0.1 -port 12345 -reuse" -errors
-        > ./fault_tolerant "Socket -server Any -port 12345 -reuse" -errors -poll
+      Terminal1: > ./fault_tolerant "InterProcessMemcpy -ID=1" -errors -endpointA
+      Terminal2: > ./fault_tolerant "InterProcessMemcpy -ID=1" -errors
+
+      Terminal1: > ./fault_tolerant "InterProcessMemcpy -ID=1" -errors -endpointA -poll
+      Terminal2: > ./fault_tolerant "InterProcessMemcpy -ID=1" -errors -poll
+
+      Terminal1: > ./fault_tolerant "InterProcessPointer -ID=1" -errors -endpointA
+      Terminal2: > ./fault_tolerant "InterProcessPointer -ID=1" -errors
+
+      Terminal1: > ./fault_tolerant "InterProcessPointer -ID=1" -errors -endpointA -poll
+      Terminal2: > ./fault_tolerant "InterProcessPointer -ID=1" -errors -poll
+
+      Terminal1: > ./fault_tolerant "InterProcessSocket -ID=1" -errors -endpointA
+      Terminal2: > ./fault_tolerant "InterProcessSocket -ID=1 -reuse" -errors
+
+      Terminal1: > ./fault_tolerant "InterProcessSocket -ID=1" -errors -endpointA -poll
+      Terminal2: > ./fault_tolerant "InterProcessSocket -ID=1 -reuse" -errors -poll
+
+      Terminal1: > ./fault_tolerant "Socket -client -IP=127.0.0.1 -port=12345" -errors -endpointA
+      Terminal2: > ./fault_tolerant "Socket -server -IP=127.0.0.1 -port=12345 -reuse" -errors
+
+      Terminal1: > ./fault_tolerant "Socket -client -IP=127.0.0.1 -ID=1" -errors -endpointA -poll
+      Terminal2: > ./fault_tolerant "Socket -server -IP=Any -ID=1" -errors -poll
 
   Windows:
     Follow the same as above, but replace "./fault_tolerant" with "fault_tolerant"

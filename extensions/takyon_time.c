@@ -11,18 +11,27 @@
 
 #include "takyon_extensions.h"
 
-void takyonSleep(double dseconds) {
 #ifdef _WIN32
-  int milliseconds = (int)(dseconds * 1000);
+  #define WIN32_LEAN_AND_MEAN
+  #include <Windows.h>
+  #include <sys/timeb.h>
+#else
+  #include <math.h>
+  #include <sys/time.h>
+#endif
+
+void takyonSleep(double seconds) {
+#ifdef _WIN32
+  int milliseconds = (int)(seconds * 1000);
   if (milliseconds > 0) {
     Sleep(milliseconds);
   }
 #else
-  int seconds = floor(dseconds);
-  int nanosecs = ((dseconds - seconds) * 1000000000);
-  if (seconds > 0 || nanosecs > 0) {
+  int int_seconds = floor(seconds);
+  int nanosecs = ((seconds - int_seconds) * 1000000000);
+  if (int_seconds > 0 || nanosecs > 0) {
     struct timespec rqtp;
-    rqtp.tv_sec = seconds;
+    rqtp.tv_sec = int_seconds;
     rqtp.tv_nsec = nanosecs;
     nanosleep(&rqtp, NULL);
   }

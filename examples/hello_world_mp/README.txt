@@ -28,17 +28,23 @@ Run:
     To see the usage options:
       > ./hello
 
-    Terminal 1 (endpoint A test variations, to match with endpoint B):
-      > ./hello "Mmap -ID 1" -endpointA
-      > ./hello "Mmap -ID 1 -share" -endpointA
-      > ./hello "Socket -local -ID 1" -endpointA
-      > ./hello "Socket -client 127.0.0.1 -port 12345" -endpointA
+    Test variations:
+      Terminal 1: > ./hello "InterProcessMemcpy -ID=1" -endpointA
+      Terminal 2: > ./hello "InterProcessMemcpy -ID=1"
 
-    Terminal 2 (endpoint B test variations, to match with endpoint A):
-      > ./hello "Mmap -ID 1"
-      > ./hello "Mmap -ID 1 -share"
-      > ./hello "Socket -local -ID 1"
-      > ./hello "Socket -server 127.0.0.1 -port 12345 -reuse"
+      Terminal 1: > ./hello "InterProcessPointer -ID=1" -endpointA
+      Terminal 2: > ./hello "InterProcessPointer -ID=1"
+
+      Terminal 1: > ./hello "InterProcessSocket -ID=1" -endpointA
+      Terminal 2: > ./hello "InterProcessSocket -ID=1"
+
+      # Uses ephemeral port number (assigned by system)
+      Terminal 1: > ./hello "Socket -client -IP=127.0.0.1 -ID=1" -endpointA
+      Terminal 2: > ./hello "Socket -server -IP=127.0.0.1 -ID=1"
+
+      # Uses specific port number (assigned by user)
+      Terminal 1: > ./hello "Socket -client -IP=127.0.0.1 -port=12345" -endpointA
+      Terminal 2: > ./hello "Socket -server -IP=127.0.0.1 -port=12345 -reuse"
 
   Windows:
     Follow the same as above, but replace "./hello" with "hello"

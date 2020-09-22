@@ -1,4 +1,4 @@
-// Copyright 2018 Abaco Systems
+// Copyright 2018,2020 Abaco Systems
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,6 +15,10 @@
 #define _takyon_extensions_h_
 
 #include "takyon.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
 
 #define TAKYON_MAX_MMAP_NAME_CHARS 31                      // This small value of 31 is imposed by Apple's OSX
 typedef struct _TakyonMmapHandle *TakyonMmapHandle;
@@ -38,8 +42,8 @@ typedef struct {
   int npaths;                   // Total paths in the collective
   int num_src_paths;
   int num_dest_paths;
-  TakyonPath **src_path_list;   // NULL is not using this thread
-  TakyonPath **dest_path_list;  // NULL is not using this thread
+  TakyonPath **src_path_list;   // NULL if not using this group
+  TakyonPath **dest_path_list;  // NULL if not using this group
 } TakyonCollectiveOne2One;
 
 typedef struct {
@@ -71,11 +75,11 @@ typedef struct {
 typedef struct {
   char *name;
   int instances;
-  int starting_thread_id;
-} TakyonThreadGroup;
+  int starting_group_id;
+} TakyonGroup;
 
 typedef struct {
-  int id;
+  int group_id;
   pthread_t thread_handle;
 } TakyonThread;
 
@@ -85,20 +89,20 @@ typedef struct {
   uint64_t bytes;
   void *addr;
   void *user_data;
-} TakyonMemoryBlock;
+} TakyonBuffer;
 
 typedef struct {
   int id;
   int thread_count;
   TakyonThread *thread_list;
-  int memory_block_count;
-  TakyonMemoryBlock *memory_block_list;
+  int buffer_count;
+  TakyonBuffer *buffer_list;
 } TakyonProcess;
 
 typedef struct {
   int id;
-  int thread_idA;
-  int thread_idB;
+  int group_idA;
+  int group_idB;
   TakyonPathAttributes attrsA;
   TakyonPathAttributes attrsB;
   TakyonPath *pathA;
@@ -114,7 +118,7 @@ typedef enum {
 } TakyonCollectiveType;
 
 typedef struct {
-  int path_id; // Can lookup thread IDs from this path
+  int path_id; // Can lookup group IDs from this path
   bool src_is_endpointA;
 } TakyonCollectiveConnection;
 
@@ -131,17 +135,17 @@ typedef struct {
   int num_paths;
   TakyonCollectiveConnection *path_list;
   TakyonPathTree *path_tree;
-} TakyonCollectiveGroup;
+} TakyonCollective;
 
 typedef struct {
-  int thread_group_count;
-  TakyonThreadGroup *thread_group_list;
+  int group_count;
+  TakyonGroup *group_list;
   int process_count;
   TakyonProcess *process_list;
   int path_count;
   TakyonConnection *path_list;
   int collective_count;
-  TakyonCollectiveGroup *collective_list;
+  TakyonCollective *collective_list;
 } TakyonGraph;
 
 //----------------------------------------------------------------
@@ -154,11 +158,12 @@ extern "C"
 #endif
 
 // Time
-extern void takyonSleep(double dseconds);
+extern void takyonSleep(double seconds);
 extern double takyonTime();
 
 // Endian
 extern bool takyonEndianIsBig();
+/*+ rename to takyonEndianSwap16Byte */
 extern void takyonEndianSwapUInt16(uint16_t *data, uint64_t num_elements);
 extern void takyonEndianSwapUInt32(uint32_t *data, uint64_t num_elements);
 extern void takyonEndianSwapUInt64(uint64_t *data, uint64_t num_elements);
@@ -202,20 +207,20 @@ extern void takyonGatherDestFinalize(TakyonGatherDest *collective);
 // Load and access a Takyon graph description from a file
 extern TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename);
 extern void takyonFreeGraphDescription(TakyonGraph *graph, int process_id);
-// Create Takyon paths and collective groups (called by the threads)
-extern void takyonCreateGraphPaths(TakyonGraph *graph, int thread_id);
-extern void takyonDestroyGraphPaths(TakyonGraph *graph, int thread_id);
+// Create Takyon paths and collective groups (called by the threads, where each thread represents a unique group ID)
+extern void takyonCreateGroupPaths(TakyonGraph *graph, int group_id);
+extern void takyonDestroyGroupPaths(TakyonGraph *graph, int group_id);
 // Graph helper functions
 extern void takyonPrintGraph(TakyonGraph *graph);
-extern TakyonThreadGroup *takyonGetThreadGroup(TakyonGraph *graph, int thread_id);
-extern int takyonGetThreadGroupInstance(TakyonGraph *graph, int thread_id);
-extern TakyonCollectiveBarrier *takyonGetBarrier(TakyonGraph *graph, const char *name, int thread_id);
-extern TakyonCollectiveReduce *takyonGetReduce(TakyonGraph *graph, const char *name, int thread_id);
-extern TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, int thread_id);
-extern TakyonScatterSrc *takyonGetScatterSrc(TakyonGraph *graph, const char *name, int thread_id);
-extern TakyonScatterDest *takyonGetScatterDest(TakyonGraph *graph, const char *name, int thread_id);
-extern TakyonGatherSrc *takyonGetGatherSrc(TakyonGraph *graph, const char *name, int thread_id);
-extern TakyonGatherDest *takyonGetGatherDest(TakyonGraph *graph, const char *name, int thread_id);
+extern TakyonGroup *takyonGetGroup(TakyonGraph *graph, int group_id);
+extern int takyonGetGroupInstance(TakyonGraph *graph, int group_id);
+extern TakyonCollectiveBarrier *takyonGetBarrier(TakyonGraph *graph, const char *name, int group_id);
+extern TakyonCollectiveReduce *takyonGetReduce(TakyonGraph *graph, const char *name, int group_id);
+extern TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, int group_id);
+extern TakyonScatterSrc *takyonGetScatterSrc(TakyonGraph *graph, const char *name, int group_id);
+extern TakyonScatterDest *takyonGetScatterDest(TakyonGraph *graph, const char *name, int group_id);
+extern TakyonGatherSrc *takyonGetGatherSrc(TakyonGraph *graph, const char *name, int group_id);
+extern TakyonGatherDest *takyonGetGatherDest(TakyonGraph *graph, const char *name, int group_id);
 // If the takyonLoadGraphDescription(<file>) is used, then the user application has to define
 // the following 2 functions to handle memory allocations from CPU, MMAPs, GPU, IO devices, etc.
 extern void *appAllocateMemory(const char *name, const char *where, uint64_t bytes, void **user_data_ret);

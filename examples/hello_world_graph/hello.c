@@ -14,7 +14,7 @@
 
 void helloTask(TakyonGraph *graph, TakyonThread *thread_info) {
   TakyonConnection *connection = &graph->path_list[0];
-  TakyonPath *path = (thread_info->id == connection->thread_idA) ? connection->pathA : connection->pathB;
+  TakyonPath *path = (thread_info->group_id == connection->group_idA) ? connection->pathA : connection->pathB;
   bool is_endpointA = path->attrs.is_endpointA;
   const char *message = is_endpointA ? "Hello from endpoint A" : "Hello from endpoint B";
   for (int i=0; i<5; i++) {

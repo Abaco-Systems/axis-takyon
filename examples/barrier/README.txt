@@ -49,16 +49,12 @@ Run:
       > ./barrier
 
     One process, multiple threads:
-      Terminal 1:
-        > ./barrier 0 graph_mt.txt
+      > ./barrier 0 graph_mt.txt
 
     All in one OS, multiple processes and multiple threads:
-      Terminal 1:
-        > ./barrier 0 graph_mp.txt
-      Terminal 2:
-        > ./barrier 1 graph_mp.txt
-      Terminal 3:
-        > ./barrier 2 graph_mp.txt
+      Terminal 1: > ./barrier 0 graph_mp.txt
+      Terminal 2: > ./barrier 1 graph_mp.txt
+      Terminal 3: > ./barrier 2 graph_mp.txt
 
   Windows:
     Follow the same as above, but replace "./barrier" with "barrier"

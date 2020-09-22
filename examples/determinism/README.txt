@@ -29,30 +29,36 @@ Run:
       > ./determinism
 
     Multi threaded (test variations that include both endpoints):
-      > ./determinism "Memcpy -ID 1" -mt
-      > ./determinism "Memcpy -ID 1" -mt -poll
-      > ./determinism "Memcpy -ID 1 -share" -mt
-      > ./determinism "Memcpy -ID 1 -share" -mt -poll
+      > ./determinism "InterThreadMemcpy -ID=1" -mt
+      > ./determinism "InterThreadMemcpy -ID=1" -mt -poll
+      > ./determinism "InterThreadPointer -ID=1" -mt
+      > ./determinism "InterThreadPointer -ID=1" -mt -poll
 
     Multi process:
-      Terminal 1 (endpoint A test variations, to match with endpoint B):
-        > ./determinism "Mmap -ID 1" -endpointA
-        > ./determinism "Mmap -ID 1" -endpointA -poll
-        > ./determinism "Mmap -ID 1 -share" -endpointA
-        > ./determinism "Mmap -ID 1 -share" -endpointA -poll
-        > ./determinism "Socket -local -ID 1" -endpointA
-        > ./determinism "Socket -local -ID 1" -endpointA -poll
-        > ./determinism "Socket -client 127.0.0.1 -port 12345" -endpointA
-        > ./determinism "Socket -client 127.0.0.1 -port 12345" -endpointA -poll
-      Terminal 2 (endpoint B test variations, to match with endpoint A):
-        > ./determinism "Mmap -ID 1"
-        > ./determinism "Mmap -ID 1" -poll
-        > ./determinism "Mmap -ID 1 -share"
-        > ./determinism "Mmap -ID 1 -share" -poll
-        > ./determinism "Socket -local -ID 1"
-        > ./determinism "Socket -local -ID 1" -poll
-        > ./determinism "Socket -server 127.0.0.1 -port 12345"
-        > ./determinism "Socket -server Any -port 12345" -poll
+      
+      Terminal 1: > ./determinism "InterProcessMemcpy -ID=1" -endpointA
+      Terminal 2: > ./determinism "InterProcessMemcpy -ID=1"
+
+      Terminal 1: > ./determinism "InterProcessMemcpy -ID=1" -endpointA -poll
+      Terminal 2: > ./determinism "InterProcessMemcpy -ID=1" -poll
+
+      Terminal 1: > ./determinism "InterProcessPointer -ID=1" -endpointA
+      Terminal 2: > ./determinism "InterProcessPointer -ID=1"
+
+      Terminal 1: > ./determinism "InterProcessPointer -ID=1" -endpointA -poll
+      Terminal 2: > ./determinism "InterProcessPointer -ID=1" -poll
+
+      Terminal 1: > ./determinism "InterProcessSocket -ID=1" -endpointA
+      Terminal 2: > ./determinism "InterProcessSocket -ID=1"
+
+      Terminal 1: > ./determinism "InterProcessSocket -ID=1" -endpointA -poll
+      Terminal 2: > ./determinism "InterProcessSocket -ID=1" -poll
+
+      Terminal 1: > ./determinism "Socket -client -IP=127.0.0.1 -port=12345" -endpointA
+      Terminal 2: > ./determinism "Socket -server -IP=127.0.0.1 -port=12345"
+
+      Terminal 1: > ./determinism "Socket -client -IP=127.0.0.1 -ID=1" -endpointA -poll
+      Terminal 2: > ./determinism "Socket -server -IP=Any -ID=1" -poll
 
   Windows:
     Follow the same as above, but replace "./determinism" with "determinism"

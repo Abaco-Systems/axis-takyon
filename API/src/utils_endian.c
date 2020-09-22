@@ -25,3 +25,18 @@ bool endianIsBig() {
     return true;
   }
 }
+
+void endianSwapUInt16(uint16_t *data, uint64_t num_elements) {
+  for (int i=0; i<num_elements; i++) {
+    uint16_t value = data[i];
+    data[i] = (value>>8) | (value<<8);
+  }
+}
+
+void endianSwapUInt32(uint32_t *data, uint64_t num_elements) {
+  for (int i=0; i<num_elements; i++) {
+    uint32_t value = data[i];
+    value = ((value << 8) & 0xFF00FF00) | ((value >> 8) & 0xFF00FF);
+    data[i] = (value << 16) | (value >> 16);
+  }
+}

@@ -17,23 +17,23 @@ static TakyonGraph *L_graph = NULL;
 
 static void *thread_entry_function(void *user_data) {
   TakyonThread *thread_info = (TakyonThread *)user_data;
-  TakyonThreadGroup *thread_group = takyonGetThreadGroup(L_graph, thread_info->id);
+  TakyonGroup *group = takyonGetGroup(L_graph, thread_info->group_id);
 
   // Create Takyon paths
-  takyonCreateGraphPaths(L_graph, thread_info->id);
+  takyonCreateGroupPaths(L_graph, thread_info->group_id);
 
   // Run correct thread
-  if (strcmp(thread_group->name, "master")==0) {
-    masterTask(L_graph, thread_info, L_ncycles);
-  } else if (strcmp(thread_group->name, "slaves")==0) {
-    slaveTask(L_graph, thread_info, L_ncycles);
+  if (strcmp(group->name, "parent")==0) {
+    parentTask(L_graph, thread_info, L_ncycles);
+  } else if (strcmp(group->name, "child")==0) {
+    childTask(L_graph, thread_info, L_ncycles);
   } else {
     printf("Could not find correct task to run in thread\n");
     exit(EXIT_FAILURE);
   }
 
   // Destroy Takyon paths
-  takyonDestroyGraphPaths(L_graph, thread_info->id);
+  takyonDestroyGroupPaths(L_graph, thread_info->group_id);
   return NULL;
 }
 

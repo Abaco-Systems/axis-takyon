@@ -13,10 +13,10 @@
 #include "barrier.h"
 
 void barrierTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
-  TakyonThreadGroup *thread_group = takyonGetThreadGroup(graph, thread_info->id);
-  int pipe_index = takyonGetThreadGroupInstance(graph, thread_info->id);
-  TakyonCollectiveBarrier *barrier = takyonGetBarrier(graph, "barrier", thread_info->id);
-  TakyonCollectiveOne2One *pipeline = takyonGetOne2One(graph, "pipeline", thread_info->id);
+  TakyonGroup *group = takyonGetGroup(graph, thread_info->group_id);
+  int pipe_index = takyonGetGroupInstance(graph, thread_info->group_id);
+  TakyonCollectiveBarrier *barrier = takyonGetBarrier(graph, "barrier", thread_info->group_id);
+  TakyonCollectiveOne2One *pipeline = takyonGetOne2One(graph, "pipeline", thread_info->group_id);
   TakyonPath *src_path = pipeline->src_path_list[0];
   TakyonPath *dest_path = pipeline->dest_path_list[0];
   int pipeline_buffer = 0;
@@ -24,7 +24,7 @@ void barrierTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
   int barrier_buffer = 0;
   int barrier_nbufs = (barrier->parent_path != NULL) ? barrier->parent_path->attrs.nbufs_AtoB : barrier->child_path_list[0]->attrs.nbufs_AtoB;
   uint64_t bytes = sizeof(int);
-  bool is_last_in_pipe = (pipe_index == (thread_group->instances - 1));
+  bool is_last_in_pipe = (pipe_index == (group->instances - 1));
 
   for (int i=0; i<ncycles; i++) {
     int *send_addr = (int *)src_path->attrs.sender_addr_list[pipeline_buffer];
@@ -36,17 +36,17 @@ void barrierTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
     if (!is_last_in_pipe) {
       // Send then recv
       takyonSend(src_path, pipeline_buffer, bytes, 0, 0, NULL);
-      if (src_path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(src_path, pipeline_buffer, NULL);
+      if (src_path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) takyonIsSendFinished(src_path, pipeline_buffer, NULL);
       takyonRecv(dest_path, pipeline_buffer, NULL, NULL, NULL);
     } else {
       // Last thread in pipe: recv then send
       takyonRecv(dest_path, pipeline_buffer, NULL, NULL, NULL);
       takyonSend(src_path, pipeline_buffer, bytes, 0, 0, NULL);
-      if (src_path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(src_path, pipeline_buffer, NULL);
+      if (src_path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) takyonIsSendFinished(src_path, pipeline_buffer, NULL);
     }
 
     // Verify data
-    int expected_pipe_index = i + (pipe_index - 1 + thread_group->instances) % thread_group->instances;
+    int expected_pipe_index = i + (pipe_index - 1 + group->instances) % group->instances;
     if (recv_addr[0] != expected_pipe_index) {
       fprintf(stderr, "Pipe[%d] got unexpected value=%d, expected=%d at cycle %d\n", pipe_index, recv_addr[0], expected_pipe_index, i);
       exit(EXIT_FAILURE);

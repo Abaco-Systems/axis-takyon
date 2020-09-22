@@ -13,13 +13,13 @@
 #include "pipeline.h"
 
 void pipelineTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
-  TakyonThreadGroup *thread_group = takyonGetThreadGroup(graph, thread_info->id);
-  int pipe_index = takyonGetThreadGroupInstance(graph, thread_info->id);
-  TakyonCollectiveOne2One *collective = takyonGetOne2One(graph, "pipeline", thread_info->id);
+  TakyonGroup *group = takyonGetGroup(graph, thread_info->group_id);
+  int pipe_index = takyonGetGroupInstance(graph, thread_info->group_id);
+  TakyonCollectiveOne2One *collective = takyonGetOne2One(graph, "pipeline", thread_info->group_id);
   TakyonPath *src_path = (collective->num_src_paths > 0) ? NULL : collective->src_path_list[0];
   TakyonPath *dest_path = (collective->num_dest_paths > 0) ? NULL : collective->dest_path_list[0];
   if ((src_path == NULL) && (dest_path == NULL)) {
-    fprintf(stderr, "Pipeline is missing the paths for thread %s[%d]\n", thread_group->name, pipe_index);
+    fprintf(stderr, "Pipeline is missing the paths for thread %s[%d]\n", group->name, pipe_index);
     exit(EXIT_FAILURE);
   }
   int buffer = 0;
@@ -36,7 +36,7 @@ void pipelineTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
       for (uint64_t j=0; j<bytes; j++) { send_addr[j] = (uint8_t)(j+ncycles); }
       // Send the data
       takyonSend(src_path, buffer, bytes, 0, 0, NULL);
-      if (src_path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(src_path, buffer, NULL);
+      if (src_path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) takyonIsSendFinished(src_path, buffer, NULL);
 
     } else if (pipe_index < collective->npaths) {
       // Intermediate thread in the pipeline
@@ -52,7 +52,7 @@ void pipelineTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
       if (i > 0) { takyonRecv(src_path, 0, NULL, NULL, NULL); }
       // Send the data
       takyonSend(src_path, buffer, bytes, 0, 0, NULL);
-      if (src_path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(src_path, buffer, NULL);
+      if (src_path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) takyonIsSendFinished(src_path, buffer, NULL);
 
     } else {
       // End of pipeline

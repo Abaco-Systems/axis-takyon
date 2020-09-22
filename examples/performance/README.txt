@@ -30,30 +30,35 @@ Run:
       > ./performance
 
     Multi threaded (test variations that include both endpoints):
-      > ./performance "Memcpy -ID 1" -mt
-      > ./performance "Memcpy -ID 1" -mt -poll
-      > ./performance "Memcpy -ID 1 -share" -mt
-      > ./performance "Memcpy -ID 1 -share" -mt -poll
+      > ./performance "InterThreadMemcpy -ID=1" -mt
+      > ./performance "InterThreadMemcpy -ID=1" -mt -poll
+      > ./performance "InterThreadPointer -ID=1" -mt
+      > ./performance "InterThreadPointer -ID=1" -mt -poll
 
     Multi process:
-      Terminal 1 (endpoint A test variations, to match with endpoint B):
-        > ./performance "Mmap -ID 1" -endpointA
-        > ./performance "Mmap -ID 1" -endpointA -poll
-        > ./performance "Mmap -ID 1 -share" -endpointA
-        > ./performance "Mmap -ID 1 -share" -endpointA -poll
-        > ./performance "Socket -local -ID 1" -endpointA
-        > ./performance "Socket -local -ID 1" -endpointA -poll
-        > ./performance "Socket -client 127.0.0.1 -port 12345" -endpointA
-        > ./performance "Socket -client 127.0.0.1 -port 12345" -endpointA -poll
-      Terminal 2 (endpoint B test variations, to match with endpoint A):
-        > ./performance "Mmap -ID 1"
-        > ./performance "Mmap -ID 1" -poll
-        > ./performance "Mmap -ID 1 -share"
-        > ./performance "Mmap -ID 1 -share" -poll
-        > ./performance "Socket -local -ID 1 -reuse"
-        > ./performance "Socket -local -ID 1 -reuse" -poll
-        > ./performance "Socket -server 127.0.0.1 -port 12345 -reuse"
-        > ./performance "Socket -server Any -port 12345 -reuse" -poll
+      Terminal 1: > ./performance "InterProcessMemcpy -ID=1" -endpointA
+      Terminal 2: > ./performance "InterProcessMemcpy -ID=1"
+
+      Terminal 1: > ./performance "InterProcessMemcpy -ID=1" -endpointA -poll
+      Terminal 2: > ./performance "InterProcessMemcpy -ID=1" -poll
+
+      Terminal 1: > ./performance "InterProcessPointer -ID=1" -endpointA
+      Terminal 2: > ./performance "InterProcessPointer -ID=1"
+
+      Terminal 1: > ./performance "InterProcessPointer -ID=1" -endpointA -poll
+      Terminal 2: > ./performance "InterProcessPointer -ID=1" -poll
+
+      Terminal 1: > ./performance "InterProcessSocket -ID=1" -endpointA
+      Terminal 2: > ./performance "InterProcessSocket -ID=1"
+
+      Terminal 1: > ./performance "InterProcessSocket -ID=1" -endpointA -poll
+      Terminal 2: > ./performance "InterProcessSocket -ID=1" -poll
+
+      Terminal 1: > ./performance "Socket -client -IP=127.0.0.1 -port=12345" -endpointA
+      Terminal 2: > ./performance "Socket -server -IP=127.0.0.1 -port=12345 -reuse"
+
+      Terminal 1: > ./performance "Socket -client -IP=127.0.0.1 -ID=1" -endpointA -poll
+      Terminal 2: > ./performance "Socket -server -IP=Any -ID=1" -poll
 
   Windows:
     Follow the same as above, but replace "./performance" with "performance"

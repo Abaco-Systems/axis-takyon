@@ -1,4 +1,4 @@
-// Copyright 2018 Abaco Systems
+// Copyright 2018,2020 Abaco Systems
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,7 +21,7 @@ static bool     L_is_multi_threaded = false;
 static bool     L_is_polling        = false;
 static int      L_nbufs             = 1;
 static uint64_t L_max_bytes         = 1024*1024*4;
-static uint64_t L_min_bytes         = 4;
+static uint64_t L_min_bytes         = 0;
 static int      L_ncycles           = 100;
 static int      L_nprime_cycles     = 1;
 
@@ -84,7 +84,8 @@ static void verifyTestData(uint8_t *data, uint64_t bytes, int cycle, uint64_t by
 }
 
 static void testThroughput(TakyonPath *path) {
-  for (uint64_t bytes=L_min_bytes; bytes<=L_max_bytes; bytes*=4) {
+  uint64_t bytes = L_min_bytes;
+  while (bytes <= L_max_bytes) {
     if (path->attrs.is_endpointA) {
       // Endpoint A:
       //  - Initiates a one way trip on all buffers at once then waits for a single response on buffer 0
@@ -98,9 +99,9 @@ static void testThroughput(TakyonPath *path) {
           if (L_validate_data) fillInTestData((uint8_t *)path->attrs.sender_addr_list[buffer], bytes, cycle);
           takyonSend(path, buffer, bytes, 0, 0, NULL);
         }
-        if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) {
+        if (path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
           for (int buffer=0; buffer<L_nbufs; buffer++) {
-            takyonSendTest(path, buffer, NULL);
+            takyonIsSendFinished(path, buffer, NULL);
           }
         }
         // Get sync signal to know all buffers are ready again
@@ -123,11 +124,14 @@ static void testThroughput(TakyonPath *path) {
         takyonSend(path, 0, 0, 0, 0, NULL);
       }
     }
+
+    bytes = (bytes == 0) ? 4 : bytes*4;
   }
 }
 
 static void testLatency(TakyonPath *path) {
-  for (uint64_t bytes=L_min_bytes; bytes<=L_max_bytes; bytes*=4) {
+  uint64_t bytes = L_min_bytes;
+  while (bytes <= L_max_bytes) {
     int buffer = 0;
     if (path->attrs.is_endpointA) {
       // Endpoint A:
@@ -160,6 +164,8 @@ static void testLatency(TakyonPath *path) {
         buffer = (buffer+1) % L_nbufs;
       }
     }
+
+    bytes = (bytes == 0) ? 4 : bytes*4;
   }
 }
 
@@ -184,32 +190,34 @@ static void endpointTask(bool is_endpointA) {
     printf("See endpoint A for results\n");
   }
 
-  // Latency
   TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, L_is_polling, L_nbufs, L_nbufs, L_max_bytes, TAKYON_WAIT_FOREVER, L_interconnect);
-  TakyonPath *latency_path = takyonCreate(&attrs);
+
+  // Latency
   if (L_test_latency) {
+    TakyonPath *latency_path = takyonCreate(&attrs);
     if (is_endpointA) {
       printf("Average One-Way Latency\n");
       printf("      Block Size           Latency\n");
       printf("  --------------  ----------------\n");
     }
     testLatency(latency_path);
+    takyonDestroy(&latency_path);
   }
-  takyonDestroy(&latency_path);
 
   // Throughput
-  attrs.send_completion_method = is_endpointA ? TAKYON_USE_SEND_TEST : TAKYON_BLOCKING;
-  TakyonPath *throughput_path = takyonCreate(&attrs);
-  takyonFreeAttributes(attrs);
   if (L_test_throughput) {
+    attrs.send_completion_method = is_endpointA ? TAKYON_USE_IS_SEND_FINISHED : TAKYON_BLOCKING;
+    TakyonPath *throughput_path = takyonCreate(&attrs);
     if (is_endpointA) {
       printf("\nThroughput\n");
       printf("       Block Size              Throughput\n");
       printf("   --------------  ----------------------\n");
     }
     testThroughput(throughput_path);
+    takyonDestroy(&throughput_path);
   }
-  takyonDestroy(&throughput_path);
+
+  takyonFreeAttributes(attrs);
 }
 
 static void *endpointThread(void *user_data) {

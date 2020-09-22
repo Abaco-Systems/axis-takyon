@@ -12,6 +12,8 @@
 #include "takyon_extensions.h"
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 
 #define MEMORY_MAP_PREFIX "_"    // This follows the Windows way: no prefix characters really needed, but matches the internals of Takyon memory maps
 
@@ -128,6 +130,7 @@ void takyonMmapFree(TakyonMmapHandle mmap_handle) {
 
 #else // Posix mmap (Linux, Mac)
 
+#include <unistd.h>
 #include <errno.h>
 #include <sys/mman.h>
 #include <sys/file.h>

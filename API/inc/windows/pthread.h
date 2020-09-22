@@ -20,6 +20,8 @@
 //   the compiled object will have all pthread calls resolved before linking.
 // -----------------------------------------------------------------------------
 
+DON'T USE THIS HEADER FILE: SleepConditionVariableCS() occasionally fails in the function pthread_cond_timedwait(). The reason is not yet understood. Use pthread4w for now. See Takyon README.md for more details.
+
 #ifndef _pthread_windows_h_
 #define _pthread_windows_h_
 
@@ -215,6 +217,8 @@ static int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 
 static int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, const struct timespec *abstime) {
   if (cond == NULL) { return 1; }
+  printf("This function does not fully work yet. Use https://sourceforge.net/projects/pthreads4w/ instead.\n");
+  return 1;
 
   // Assuming mutex is already locked: EnterCriticalSection(&mutex);
 
@@ -231,6 +235,7 @@ static int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, 
   }
 
   // Do the timed wait
+  // ------------------------------ FAILS here for some odd reason. Sometimes by just exiting the application -----------------------
   BOOL success = SleepConditionVariableCS(&cond->cond_var, &mutex->critical_section, milliseconds);
   if (!success) return 1;
 

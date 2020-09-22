@@ -16,6 +16,7 @@
 // -----------------------------------------------------------------------------
 
 #include "takyon_private.h"
+#include <unistd.h>
 
 int memoryPageSize() {
   return sysconf(_SC_PAGESIZE);

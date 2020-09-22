@@ -1,27 +1,27 @@
-ThreadGroups
-ThreadGroup: master
+Groups
+Group: parent
   Instances: 1
-ThreadGroup: slaves
+Group: child
   Instances: 3
 
 Processes
 Process: 0
-  Threads: master[0] slaves[0] slaves[1] slaves[2]
+  GroupIDs: parent[0] child[0] child[1] child[2]
 
-MemoryBlocks
-MemoryBlock: scatterSrc0
+Buffers
+Buffer: scatterSrc0
   ProcessId: 0
   Where: CPU
   Bytes: 3000
-MemoryBlock: scatterSrc1
+Buffer: scatterSrc1
   ProcessId: 0
   Where: CPU
   Bytes: 3000
-MemoryBlock: gatherDest0
+Buffer: gatherDest0
   ProcessId: 0
   Where: CPU
   Bytes: 3000
-MemoryBlock: gatherDest1
+Buffer: gatherDest1
   ProcessId: 0
   Where: CPU
   Bytes: 3000
@@ -31,11 +31,12 @@ Defaults
   IsPolling: false, false
   AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
-  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 2, 2
@@ -45,28 +46,28 @@ Defaults
   SenderAddrList: NULL NULL, NULL NULL
   RecverAddrList: NULL NULL, NULL NULL
 Path: 0
-  Thread: master[0], slaves[0]
-  InterconnectA: Memcpy -ID 1
-  InterconnectB: Memcpy -ID 1
+  Endpoints: parent[0], child[0]
+  InterconnectA: InterThreadMemcpy -ID=1
+  InterconnectB: InterThreadMemcpy -ID=1
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 1
-  Thread: master[0], slaves[1]
-  InterconnectA: Memcpy -ID 2
-  InterconnectB: Memcpy -ID 2
+  Endpoints: parent[0], child[1]
+  InterconnectA: InterThreadMemcpy -ID=2
+  InterconnectB: InterThreadMemcpy -ID=2
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 2
-  Thread: master[0], slaves[2]
-  InterconnectA: Memcpy -ID 3
-  InterconnectB: Memcpy -ID 3
+  Endpoints: parent[0], child[2]
+  InterconnectA: InterThreadMemcpy -ID=3
+  InterconnectB: InterThreadMemcpy -ID=3
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 
-CollectiveGroups
-CollectiveGroup: scatter
+Collectives
+Collective: scatter
   Type: SCATTER
   PathSrcIds: 0:A 1:A 2:A
-CollectiveGroup: gather
+Collective: gather
   Type: GATHER
   PathSrcIds: 0:B 1:B 2:B

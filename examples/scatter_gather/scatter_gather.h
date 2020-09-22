@@ -12,7 +12,7 @@
 #ifndef _scatter_gather_h_
 #define _scatter_gather_h_
 
-void masterTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
-void slaveTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
+void parentTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
+void childTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
 
 #endif

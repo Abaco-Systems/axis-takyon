@@ -10,6 +10,9 @@
 // limitations under the License.
 
 #include "takyon.h"
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
 
 static const char *interconnect = NULL;
 
@@ -21,12 +24,13 @@ static void *hello_thread(void *user_data) {
   attrs.is_polling                  = false;
   attrs.abort_on_failure            = true;
   attrs.verbosity                   = TAKYON_VERBOSITY_ERRORS;
-  strncpy(attrs.interconnect, interconnect, MAX_TAKYON_INTERCONNECT_CHARS);
-  attrs.create_timeout              = TAKYON_WAIT_FOREVER;
+  strncpy(attrs.interconnect, interconnect, TAKYON_MAX_INTERCONNECT_CHARS);
+  attrs.path_create_timeout         = TAKYON_WAIT_FOREVER;
   attrs.send_start_timeout          = TAKYON_WAIT_FOREVER;
-  attrs.send_complete_timeout       = TAKYON_WAIT_FOREVER;
-  attrs.recv_complete_timeout       = TAKYON_WAIT_FOREVER;
-  attrs.destroy_timeout             = TAKYON_WAIT_FOREVER;
+  attrs.send_finish_timeout         = TAKYON_WAIT_FOREVER;
+  attrs.recv_start_timeout          = TAKYON_WAIT_FOREVER;
+  attrs.recv_finish_timeout         = TAKYON_WAIT_FOREVER;
+  attrs.path_destroy_timeout        = TAKYON_WAIT_FOREVER;
   attrs.send_completion_method      = TAKYON_BLOCKING;
   attrs.recv_completion_method      = TAKYON_BLOCKING;
   attrs.nbufs_AtoB                  = 1;

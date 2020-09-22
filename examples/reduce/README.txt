@@ -51,16 +51,12 @@ Run:
       > ./reduce
 
     One process, multiple threads:
-      Terminal 1:
-        > ./reduce 0 graph_mt.txt -scatter
+      Terminal 1: > ./reduce 0 graph_mt.txt -scatter
 
     All in one OS, multiple processes and multiple threads:
-      Terminal 1:
-        > ./reduce 0 graph_mp.txt -scatter
-      Terminal 2:
-        > ./reduce 1 graph_mp.txt -scatter
-      Terminal 3:
-        > ./reduce 2 graph_mp.txt -scatter
+      Terminal 1: > ./reduce 0 graph_mp.txt -scatter
+      Terminal 2: > ./reduce 1 graph_mp.txt -scatter
+      Terminal 3: > ./reduce 2 graph_mp.txt -scatter
 
   Windows:
     Follow the same as above, but replace "./reduce" with "reduce"

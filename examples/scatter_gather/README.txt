@@ -10,10 +10,10 @@ Description:
     - Allows Takyon paths to be grouped into collective calls (e.g. scatter, gather).
       In this case the same paths are used by scatter and gather for an efficient use
       of resources, but that's not a requirement.
-    - The master side allocates a block of memory to hold all of the sender side
+    - The parent side allocates a block of memory to hold all of the sender side
       scatter data in a single contiguous block. Each scatter receiver get a unique
       block of the data.
-    - The master side allocates a block of memory to hold all of the receiver side
+    - The parent side allocates a block of memory to hold all of the receiver side
       gather data in a single contiguous block. This memory block is used by all paths.
       For this to work with an 'Mmap' interconnect, it means the memory block must be
       a named memory mapped. The graph description file defines an memory block that
@@ -23,15 +23,15 @@ Description:
       more executables if needed. No compiling is needed, which means this app
       is scalable.
 
-  The executable has two types of processing threads: master and slave. Only one
-  master should exist. There can be 1 or more slaves. The graph description file
+  The executable has two types of processing threads: parent and child. Only one
+  parent should exist. There can be 1 or more children. The graph description file
   defines how many processes and threads there are and what their IDs are.
 
-  Master algorithm:
-    1. Scatter, from a contiguous block, to all slave endpoints.
-    2. Gather from all slave endpoints.
+  Parent algorithm:
+    1. Scatter, from a contiguous block, to all child endpoints.
+    2. Gather from all child endpoints.
     3. Verify received data is correct.
-  Slave algorithm:
+  Child algorithm:
     1. Recv scattered data.
     3. Add 1 to each byte.
     2. Send data to be gathered.
@@ -68,16 +68,12 @@ Run:
       > ./scatter_gather
 
     One process, multiple threads:
-      Terminal 1:
-        > ./scatter_gather 0 graph_mt.txt
+      > ./scatter_gather 0 graph_mt.txt
 
     All in one OS, multiple processes and multiple threads:
-      Terminal 1:
-        > ./scatter_gather 0 graph_mp.txt
-      Terminal 2:
-        > ./scatter_gather 1 graph_mp.txt
-      Terminal 3:
-        > ./scatter_gather 2 graph_mp.txt
+      Terminal 1: > ./scatter_gather 0 graph_mp.txt
+      Terminal 2: > ./scatter_gather 1 graph_mp.txt
+      Terminal 3: > ./scatter_gather 2 graph_mp.txt
 
   Windows:
     Follow the same as above, but replace "./scatter_gather" with "scatter_gather"

@@ -84,20 +84,25 @@ bool mmapAlloc(const char *map_name, uint64_t bytes, void **addr_ret, MmapHandle
   /* Get a handle to mapped memory */
   mapped_addr = (LPTSTR)MapViewOfFile(mapping_handle, FILE_MAP_ALL_ACCESS, 0, 0, bytes);
   if (mapped_addr == NULL) {
+    CloseHandle(mapping_handle);
     TAKYON_RECORD_ERROR(error_message, "could not obtain mapped address for '%s'\n", map_name);
     return false;
   }
 
-  *addr_ret = (void *)mapped_addr;
-
   /* IMPORTANT: Don't set any of the memory values here since there might be a race condition. The memory values needed to be coordinated properly by the processes ussing it. */
+  *addr_ret = (void *)mapped_addr;
+  /* NOTE: Not pinning memory like with Linux, but may not be an issue */
 
   /* Create handle and store info */
   mmap_handle = (struct _MmapHandle *)calloc(1, sizeof(struct _MmapHandle));
   if (mmap_handle == NULL) {
+    UnmapViewOfFile(mapped_addr);
+    CloseHandle(mapping_handle);
     TAKYON_RECORD_ERROR(error_message, "Failed to allocate the mmap handle. Out of memory.\n");
     return false;
   }
+
+  /* Store the map info */
   strncpy(mmap_handle->map_name, full_map_name, MAX_MMAP_NAME_CHARS);
   mmap_handle->mapping_handle = mapping_handle;
   mmap_handle->mapped_addr = mapped_addr;
@@ -154,6 +159,7 @@ bool mmapGet(const char *map_name, uint64_t bytes, void **addr_ret, bool *got_it
   /* Get a handle to remote mapped memory */
   mapped_addr = (LPTSTR)MapViewOfFile(mapping_handle, FILE_MAP_ALL_ACCESS, 0, 0, bytes);
   if (mapped_addr == NULL) {
+    CloseHandle(mapping_handle);
     TAKYON_RECORD_ERROR(error_message, "Could not obtain address mapping for '%s'\n", map_name);
     return false;
   }

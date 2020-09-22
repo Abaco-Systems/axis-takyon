@@ -1,27 +1,28 @@
-ThreadGroups
-ThreadGroup: tree
+Groups
+Group: tree
   Instances: 11
 
 Processes
 Process: 0
-  Threads: tree[0] tree[1] tree[2]
+  GroupIDs: tree[0] tree[1] tree[2]
 Process: 1
-  Threads: tree[3] tree[4] tree[5] tree[6]
+  GroupIDs: tree[3] tree[4] tree[5] tree[6]
 Process: 2
-  Threads: tree[7] tree[8] tree[9] tree[10]
+  GroupIDs: tree[7] tree[8] tree[9] tree[10]
 
-MemoryBlocks
+Buffers
 
 Paths
 Defaults
   IsPolling: false, false
   AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
-  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 2, 2
@@ -31,52 +32,52 @@ Defaults
   SenderAddrList: NULL NULL, NULL NULL
   RecverAddrList: NULL NULL, NULL NULL
 Path: 11
-  Thread: tree[0], tree[1]
-  InterconnectA: Memcpy -ID 12
-  InterconnectB: Memcpy -ID 12
+  Endpoints: tree[0], tree[1]
+  InterconnectA: InterThreadMemcpy -ID=12
+  InterconnectB: InterThreadMemcpy -ID=12
 Path: 12
-  Thread: tree[0], tree[2]
-  InterconnectA: Memcpy -ID 13
-  InterconnectB: Memcpy -ID 13
+  Endpoints: tree[0], tree[2]
+  InterconnectA: InterThreadMemcpy -ID=13
+  InterconnectB: InterThreadMemcpy -ID=13
 Path: 13
-  Thread: tree[1], tree[3]
-  InterconnectA: Socket -local -ID 14
-  InterconnectB: Socket -local -ID 14
+  Endpoints: tree[1], tree[3]
+  InterconnectA: InterProcessSocket -ID=14
+  InterconnectB: InterProcessSocket -ID=14
 Path: 14
-  Thread: tree[1], tree[4]
-  InterconnectA: Mmap -ID 15
-  InterconnectB: Mmap -ID 15
+  Endpoints: tree[1], tree[4]
+  InterconnectA: InterProcessMemcpy -ID=15
+  InterconnectB: InterProcessMemcpy -ID=15
 Path: 15
-  Thread: tree[2], tree[5]
-  InterconnectA: Socket -local -ID 16
-  InterconnectB: Socket -local -ID 16
+  Endpoints: tree[2], tree[5]
+  InterconnectA: InterProcessSocket -ID=16
+  InterconnectB: InterProcessSocket -ID=16
 Path: 16
-  Thread: tree[2], tree[6]
-  InterconnectA: Mmap -ID 17
-  InterconnectB: Mmap -ID 17
+  Endpoints: tree[2], tree[6]
+  InterconnectA: InterProcessMemcpy -ID=17
+  InterconnectB: InterProcessMemcpy -ID=17
 Path: 17
-  Thread: tree[2], tree[7]
-  InterconnectA: Mmap -ID 18
-  InterconnectB: Mmap -ID 18
+  Endpoints: tree[2], tree[7]
+  InterconnectA: InterProcessMemcpy -ID=18
+  InterconnectB: InterProcessMemcpy -ID=18
 Path: 18
-  Thread: tree[4], tree[8]
-  InterconnectA: Socket -local -ID 19
-  InterconnectB: Socket -local -ID 19
+  Endpoints: tree[4], tree[8]
+  InterconnectA: InterProcessSocket -ID=19
+  InterconnectB: InterProcessSocket -ID=19
 Path: 19
-  Thread: tree[4], tree[9]
-  InterconnectA: Socket -local -ID 20
-  InterconnectB: Socket -local -ID 20
+  Endpoints: tree[4], tree[9]
+  InterconnectA: InterProcessSocket -ID=20
+  InterconnectB: InterProcessSocket -ID=20
 Path: 20
-  Thread: tree[5], tree[10]
-  InterconnectA: Mmap -ID 21
-  InterconnectB: Mmap -ID 21
+  Endpoints: tree[5], tree[10]
+  InterconnectA: InterProcessMemcpy -ID=21
+  InterconnectB: InterProcessMemcpy -ID=21
 
-CollectiveGroups
-CollectiveGroup: reduce
+Collectives
+Collective: reduce
   Type: REDUCE
   # Path list is a depth first tree with any number of children per parent
   PathSrcIds: 11:A ( 13:A 14:A ( 18:A 19:A ) ) 12:A ( 15:A ( 20:A ) 16:A 17:A )
-CollectiveGroup: barrier
+Collective: barrier
   Type: BARRIER
   # Path list is a depth first tree with any number of children per parent
   PathSrcIds: 11:A ( 13:A 14:A ( 18:A 19:A ) ) 12:A ( 15:A ( 20:A ) 16:A 17:A )

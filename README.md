@@ -1,7 +1,7 @@
 ![Takyon Logo](docs/Takyon_Abaco-logo.jpg)
 
 ## License
-  Copyright 2018 Abaco Systems
+  Copyright 2018,2020 Abaco Systems
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
@@ -13,212 +13,397 @@
   limitations under the License.
 
 ## About
-Takyon is a high level, high speed, portable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the embedded HPC industry, with no intention to compete with MPI which is focused on the HPC industry. Like MPI, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API. This is to provide an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application). Here's a hello world example that could work with any interconnect and any locality:
+Takyon is a high level, high speed, portable, dynamic, fully scalable, point to point, message passing, communication API. It's focused on the **Embedded HPC** industry, with no intention to compete with MPI which is focused on the **HPC** industry.
+
+**Like MPI**, Takyon is designed to be a wrapper over many low level point to point communication APIs and look like a single high level message passing API.
+
+**Unlike MPI**, Takyon is designed for the extra requirements of the **Embedded HPC** industry:
+- Better performance via one-way, zero-copy transfers on memory blocks that are preregistered when a communication path is created
+- Better determinism: once a path is created, there's no implicit extra transfers, extra synchronization, memory allocations, or memory registrations
+- Fault tolerant ready at the application level: all communication paths are independent of each other, can be created or destroyed at any time, all failures are reported to the application, and timeouts are provided for all stages of communication
+- Unconnected communications (unicast & multicast datagrams) where data can be dropped
+- Can be used with IO devices: cameras, lidar, A2D converter, D2A converter, etc.
+
+Takyon provides an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application).
+
+## Potential to Become a Standard
+The Khronos organization (khronos.org), that brought the world OpenGL, Vulkan, OpenCL, etc., has approved the need of a "heterogeneous communication standard" working group. The working group will be formed once the group has reached a quorum. Takyon is currently the only proposed API, but widely accepted by the exploratory group members. Visit the Khronos website to see more details on the need for heterogeneous communication: https://www.khronos.org/exploratory/heterogeneous-communication/ Contact Khronos if you wish to be a member of the working group to define the new standard.
+
+## Functionality
+Takyon has two groups of functionality.
+
+### Core (only 5 functions!!!)
+Takyon's core functionality (the foundation) is simple yet extremely flexible:
 ```
-// Sender
-TakyonPathAttributes attrs = takyonAllocAttributes(is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -client 192.168.35.23 -port 12345");
-TakyonPath *path = takyonCreate(&attrs);
-char *data_addr = (char *)path->attrs.sender_addr_list[buffer];
-uint64_t nbytes = 1 + (uint64_t)sprintf(data_addr, "%s", "Hello World!");
-takyonSend(path, buffer, nbytes, 0/*soffset*/, 0/*doffset*/, NULL/*&timed_out*/);
-if (path->attrs.send_completion_method == TAKYON_USE_SEND_TEST) takyonSendTest(path, buffer, NULL/*&timed_out*/);
-takyonDestroy(&path);
-
-// Receiver
-TakyonPathAttributes attrs = takyonAllocAttributes(!is_endpointA, is_polling, nbufsAtoB, nbufsBtoA, max_bytes, TAKYON_WAIT_FOREVER, "Socket -server Any -port 12345");
-TakyonPath *path = takyonCreate(&attrs);
-takyonRecv(path, buffer, NULL/*&bytes_received*/, NULL/*&offset*/, NULL/*&timed_out*/);
-char *data_addr = (char *)(path->attrs.recver_addr_list[buffer] + offset);
-printf("Message from sender: %s\n", data_addr);
-takyonDestroy(&path);
+takyonCreate()         - Create a connected or unconnected communication path
+takyonSend()           - Send a message
+takyonIsSendFinished() - Checks if a non-blocking send is finished
+takyonRecv()           - Wait for a message to arrive
+takyonDestroy()        - Destroy the communication path
 ```
-To change to a different locality/interconnect, just modify "Socket ..." with any supported interconnect.
+All core functionality is defined in the header file:
+```
+Takyon/API/inc/takyon.h
+```
+### Open Source Extensions
+Takyon also includes open source functionality to provide references to common communication functionality. It's provided as source code to allow for easy modification/tuning as needed by the application requirements. The included functionality:
+- Time: sleep, wall clock
+- Path Attribute Management: makes multi-buffer list management a little easier 
+- Endian: testing & swapping
+- Shared Memory Management: manage named buffers for inter-process communication
+- Collective Functions: barrier, scatter, gather, reduce, custom
+- Graph File Management: defining data-flow via a config file; to avoid hard-coding in source
 
-### Mission Statement
-The flexibility and performance of low level. The simplicity of high level.
+All extensions are defined in the header file:
+```
+Takyon/extenstions/takyon_extensions.h
+```
 
-### Documentation
+## Simple Example
+Here's an example of a connected communication path that could work with any two-sided interconnect:
+```
+#include "takyon.h"
+
+#define INTERCONNECT_ENDPOINT_A "Socket -client -IP=192.168.33.23 -ID=45"
+#define INTERCONNECT_ENDPOINT_B "Socket -server -IP=Any -ID=45"
+
+void simpleExample(bool is_endpointA) {
+  // Setup the two-sided communication path attributes
+  TakyonPathAttributes attrs;
+  attrs.is_endpointA                = is_endpointA;
+  attrs.is_polling                  = false;
+  attrs.abort_on_failure            = true;
+  attrs.verbosity                   = TAKYON_VERBOSITY_ERRORS;
+  if (attrs.is_endpointA) {
+    strncpy(attrs.interconnect, INTERCONNECT_ENDPOINT_A, TAKYON_MAX_INTERCONNECT_CHARS);
+  } else {
+    strncpy(attrs.interconnect, INTERCONNECT_ENDPOINT_B, TAKYON_MAX_INTERCONNECT_CHARS);
+  }
+  attrs.path_create_timeout         = TAKYON_WAIT_FOREVER;
+  attrs.send_start_timeout          = TAKYON_WAIT_FOREVER;
+  attrs.send_finish_timeout         = TAKYON_WAIT_FOREVER;
+  attrs.recv_start_timeout          = TAKYON_WAIT_FOREVER;
+  attrs.recv_finish_timeout         = TAKYON_WAIT_FOREVER;
+  attrs.path_destroy_timeout        = TAKYON_WAIT_FOREVER;
+  attrs.send_completion_method      = TAKYON_BLOCKING;
+  attrs.recv_completion_method      = TAKYON_BLOCKING;
+  attrs.nbufs_AtoB                  = 1;
+  attrs.nbufs_BtoA                  = 1;
+  uint64_t sender_max_bytes_list[1] = { 1024 };
+  attrs.sender_max_bytes_list       = sender_max_bytes_list;
+  uint64_t recver_max_bytes_list[1] = { 1024 };
+  attrs.recver_max_bytes_list       = recver_max_bytes_list;
+  size_t sender_addr_list[1]        = { 0 };
+  attrs.sender_addr_list            = sender_addr_list;
+  size_t recver_addr_list[1]        = { 0 };
+  attrs.recver_addr_list            = recver_addr_list;
+
+  // Create the path
+  TakyonPath *path = takyonCreate(&attrs);
+
+  // Pass some friendly greetings around and around
+  const char *message = is_endpointA ? "Hello from endpoint A" : "Hello from endpoint B";
+  for (int i=0; i<5; i++) {
+    int buffer_index = 0;
+    uint64_t max_send_buffer_bytes = path->attrs.sender_max_bytes_list[buffer_index];
+    char *send_buffer = (char *)path->attrs.sender_addr_list[buffer_index];
+    char *recv_buffer = (char *)path->attrs.recver_addr_list[buffer_index];
+    if (is_endpointA) {
+      strncpy(send_buffer, message, max_send_buffer_bytes);
+      takyonSend(path, buffer_index, strlen(message)+1, 0, 0, NULL);
+      takyonRecv(path, buffer_index, NULL, NULL, NULL);
+      printf("Endpoint A received message %d: %s\n", i, recv_buffer);
+    } else {
+      takyonRecv(path, buffer_index, NULL, NULL, NULL);
+      printf("Endpoint B received message %d: %s\n", i, recv_buffer);
+      strncpy(send_buffer, message, max_send_buffer_bytes);
+      takyonSend(path, buffer_index, strlen(message)+1, 0, 0, NULL);
+    }
+  }
+
+  // Destroy the path
+  takyonDestroy(&path);
+```
+To change to a different locality/interconnect, just modify INTERCONNECT_ENDPOINT_A and INTERCONNECT_ENDPOINT_B with any supported interconnect.
+
+## Documentation
 For all the great details on Takyon, read the following PDFs in Takyon's `docs/` folder:
 - Takyon Reference Sheet.pdf - All the details at a quick glance.
 - Takyon Users Guide.pdf     - In depth details of the design and how to use the API.
 
-This readme documents the supported operating systems and interconnects for Abaco's reference implementation of Takyon. It provides instructions on how to build the libraries and the examples. Refer to the example specific readme files to determine how to run each example.
+## Takyon Core Build Instructions
+Before running any examples, the Takyon core libraries must be built.
 
-## Supported OSes
 ### Linux
-- Tested on Ubuntu 16.04 64-bit Intel using gcc, but should work on most other Linux flavors and chip architectures.
-- All interconnects are supported
-### Mac
-- Tested on OSX 10.13 64-bit using gcc
-- All interconnects are supported
-### Windows
-- Tested on Window 10 64-bit using MSVC 2015 & 2017
-- All interconnects are supported
-
-## Build Instructions
-### Linux
+*Tested on Ubuntu 16.04, 18.04 64-bit Intel using gcc, but should work on most other Linux flavors and chip architectures.*
 ```
-> cd Takyon/API/builds/linux_intel_64bit
+> cd Takyon/API/builds/linux
 > make
 ```
 This creates:
 ```
-libTakyon.a
-libTakyonMemcpy.so
-libTakyonMmap.so
-libTakyonSocket.so
+libTakyon.a                (interconnects are dynamically loaded)
+libTakyon<interconnect>.so (one per interconnect to be used with libTakyon.a)
+libTakyonStatic.a          (single library with all supported inteconnects)
 ```
 ### Mac OSX
+*Tested on OSX 10.13 64-bit using gcc*
 ```
-> cd Takyon/API/builds/mac_intel_64bit
+> cd Takyon/API/builds/mac
 > make
 ```
 This creates:
 ```
-libTakyon.a
-libTakyonMemcpy.so
-libTakyonMmap.so
-libTakyonSocket.so
+libTakyon.a                (interconnects are dynamically loaded)
+libTakyon<interconnect>.so (one per interconnect to be used with libTakyon.a)
+libTakyonStatic.a          (single library with all supported inteconnects)
 ```
 ### Windows
+*Tested on Window 10 64-bit using MSVC 2015, 2017, 2019*
+
+Takyon uses POSIX threads (i.e. pthreads), and by default MSVC does not include support for pthreads, so it must be manually downloaded and built.
+1. Download the source from: https://sourceforge.net/projects/pthreads4w/
+2. Unzip in the C: drive and rename the folder to `c:\pthreads4w`
+3. Start an MSVC command shell (not PowerShell), make sure to run the `vcvars64.bat`
 ```
-> cd Takyon\API\builds\windows_intel_64bit
+> cd c:\pthreads4w
+> nmake VC VC-debug VC-static VC-static-debug install DESTROOT=.\install
+```
+This creates the header files and libraries files in:
+```
+c:/pthreads4w/install/include/
+c:/pthreads4w/install/lib/
+c:/pthreads4w/install/bin/
+```
+Now you can build the Takyon library:
+```
+> cd Takyon\API\builds\windows
 > nmake
 ```
 This creates:
-- Takyon.lib
+```
+Takyon.lib                 (single library with all supported inteconnects)
+```
 
 ## Preparing to Run Examples
+This is a one-time step before running any of the examples.
+
 ### Linux
+If using **libTakyon.a** with the dynamic libraries, then run the following first:
 ```
-> export TAKYON_LIBS="<Takyon_parent_folder>/Takyon/API/builds/linux_intel_64bit"
+> export TAKYON_LIBS="<Takyon_parent_folder>/Takyon/API/builds/linux"
 ```
+If using the static library **libTakyonStatic.a**, then no environment variable is needed.
+
 ### Mac OSX
+If using **libTakyon.a** with the dynamic libraries, then run the following first:
 ```
-> export TAKYON_LIBS="<Takyon_parent_folder>/Takyon/API/builds/mac_intel_64bit"
+> export TAKYON_LIBS="<Takyon_parent_folder>/Takyon/API/builds/mac"
 ```
+If using the static library **libTakyonStatic.a**, then no environment variable is needed.
+
 ### Windows
-All features are encapsulated in the static library Takyon.lib, so no environment variable is needed.
+All features are encapsulated in the static library **Takyon.lib**, so no environment variable is needed.
+
+## Examples
+The examples are found in `Takyon/examples/`
+
+### Building and Running
+Each example has a `README.txt` which explains what is does and how to build and run.
+
+### Overview of the Examples
+Getting Started:
+- **hello_world_mt**: Communicate between two threads in a single process
+- **hello_world_mp**: Communicate between two processes (same or different processors)
+
+Some Key Techniques:
+- **performance**: Calculates the average latency and throughput of various sized transfers
+- **determinism**: Displays histogram of transfer times to understand determinism
+- **fault_tolerant**: Shows how to recover from failures (via timeouts, cable disconnection, or control-C)
+- **one_sided**: A connected path, but one endpoint is 3rd party; i.e. not a Takyon endpoint
+- **connectionless**: Send or receive datagrams (multicast or unicast). Allows data dropping. Ideal for live streaming.
+
+Graph Based (more like MPI; data flow is defined in config file to avoid hard coding in the application):
+- **hello_world_graph**: A simple example of how to use the graph file
+- **barrier**: Uses a barrier to synchronize the pipeline processing
+- **reduce**: Does an app defined reduction (in this case: max) and optionally passes the result to all endpoints
+- **pipeline**: Pipeline style processing where paths are connected in series
+- **scatter_gather**: Scatters from a single contiguous buffer, processes, then gathers into a single contiguous buffer
 
 ## Supported Interconnects
-This reference implementation supports commonly used mechanisms for inter-thread, inter-process and inter-processor communication. Abaco's upcoming commercial implementation will support additional inter-processor and GPU communication protocols including RDMA and GPU IPC.
+This reference implementation supports commonly used mechanisms for inter-thread, inter-process and inter-processor communication. Abaco's commercial implementation supports additional communication protocols including RDMA, GPUDirect, and GPU IPC.
 
-### Memcpy
-- Endpoints must be in the same process but different threads.
-- Uses Posix mutexes and conditional variables to handle atomic coordination.
-- Application can optionally pass in sender and/or receiver memory, otherwise it will be allocated by Takyon.
-- If `-share` option is used:
-  - Both endpoints will share the memory buffers for a particular direction (`AtoB` and `BtoA` are different directions). This is an advanced feature.
-  - Application can optionally pass in sender or receiver memory (but not both), otherwise it will be allocated by Takyon.
-### Mmap
-- Endpoints must be in the same OS but different processes.
-- Uses Posix memory map for data memory that is accessible between processes.
-- On unix, uses process shared Posix mutexes and conditional variables to handle atomic coordination. On Windows, uses processed based Mutex and Events.
-- Uses local sockets for connecting, disconnecting, and detecting disconnections.
-- Application can optionally pass in sender memory, otherwise it will be allocated by Takyon.
-- Application can optionally pass in pre-allocated named memory maps, otherwise it will be allocated by Takyon. In order to allow this, the interconnect flag `-app_alloced_recv_mmap` must be set on the endpoint that allocates the named memory maps. The remote endpoint must then set the flag `-remote_mmap_prefix <prefix-name>`, where `<prefix-name><buffer_index>` is the name used when the memory mapped buffers were created. This is helpful when multiple communication paths are used to gather data into a contiguous buffer.
-- If `-share` option is used:
-  - Both endpoints will share the memory buffers for a particular direction (`AtoB` and `BtoA` are different directions). This is an advanced feature.
+### InterThreadMemcpy
+Endpoints must be in the same process but different threads. Uses Posix mutexes and conditional variables to handle synchronization of memcpy() transfers.
+
+Required arguments:
+```
+-ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
+```
+
+### InterThreadPointer
+Endpoints must be in the same process but different threads. Uses Posix mutexes and conditional variables to handle synchronization of pointers to shared blocks of memory (shared by the sender and receiver).
+
+Required arguments:
+```
+-ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
+```
+### InterProcessMemcpy
+Endpoints must be in the same OS but different processes. Uses local sockets to coordinate path creation, path destruction, and synchronization of memcpy() transfers. The receive buffers are shared memory maps.
+
+Required arguments:
+```
+-ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
+```
+Optional Arguments;
+```
+-appAllocedRecvMmap           (Use this if the app manually allocates shared MMAP receive
+                               buffers. Use the naming format "<name><index>", where <index>
+                               starts from 0, one per buffer.)
+-remoteMmapPrefix=<name>      (If the remote side manually allocates shared receive MMAP
+                               buffers, then need the prefix name.)
+```
+
+### InterProcessPointer
+Endpoints must be in the same OS but different processes. Uses local sockets to coordinate path creation, path destruction, and synchronization of pointers to shared blocks of memory (shared by the sender and receiver). The receive buffers are shared memory maps.
+
+Required arguments:
+```
+-ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
+```
+Optional Arguments;
+```
+-appAllocedRecvMmap           (Use this if the app manually allocates shared MMAP receive
+                               buffers. Use the name format "<name><index>", where <index>
+                               starts from 0, one per buffer.)
+-remoteMmapPrefix=<name>      (If the remote side manually allocates shared receive MMAP
+                               buffers, then need the prefix name.)
+```
+
+### InterProcessSocket
+Endpoints must be in the same OS but different processes. Uses a local socket to coordinate path creation, path destruction, and the transfers.
+
+Required arguments:
+```
+-ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
+```
+
 ### Socket
-- Endpoints can be in the same OS or different OSes, but in the same IP network.
-- Can use local sockets (if in the same OS only) or TCP sockets. If using local sockets, on Linux and Mac, it will use a local Unix socket which will have better performance than using a TCP socket with IP address 127.0.0.1. On Windows it uses 127.0.0.1 with a TCP connection since local Unix sockets do not exist on Windows.
-- The socket option "TCP No delay" is turned on to improve latency.
-- If polling is used (i.e. `attrs.is_polling = true`), sockets do not require both endpoints to be polling.
-### SocketDatagram
-- Endpoints can be in the same OS or different OSes, but in the same IP network. Only are independent of each other. Remote endpoint does not need to be a Takyon endpoint. Also used for UDP enabled IO devices.
-- Is used for UDP connectionless transfers (good for live-streaming and multicasting)
-- Endpoint A is always a sender and endpoint B is always a receiver.
+Endpoints can be in the same OS or different OSes, but in the same IP network. Uses a TCP socket to do transfers.
 
-## Interconnect Specifications
-These are the text strings passed into `attributes->interconnect[]`
-### Connected Specifications (two sided)
-These are reliable two-way connections where both endpoints must be created together to allow for transfers.
-- Inter-thread (endpoints in the same process)  
-`Memcpy -ID <ID> [-share]`
-- Inter-process (endpoints in the same OS)  
-`Mmap -ID <ID> [-share] [-reuse] [-app_alloced_recv_mmap] [-remote_mmap_prefix <name>]`  
-`Socket -local -ID <ID> [-reuse]`  
-`Socket -client 127.0.0.1 -port <port>`  
-`Socket -server 127.0.0.1 -port <port> [-reuse]`  
-`Socket -server Any -port <port> [-reuse]`
-- Inter-processor (endpoints not in the same OS)  
-`Socket -client <IP> -port <port>`  
-`Socket -server <IP> -port <port> [-reuse]`  
-`Socket -server Any -port <port> [-reuse]`
-### Bi-Directional Parameter Descriptions
-- `-ID <ID>`  
-Can be any integer
-- `-share`  
-Sender and receiver share the same buffers. Don't put data in the sender buffer until the receiver is done processing on the buffer.
-- `-app_alloced_recv_mmap`  
-Informs the path that all of the receive buffers where allocated by the application using a named memory map.
-- `-remote_mmap_prefix <name>`  
-If the remote endpoint is using an application allocated named memory map for the buffers, this defines the name used to create the memory maps.
-- `-local`  
-Uses a Unix local socket which is better performance due to avoid some of the TCP stack
-- `-client 127.0.0.1`  
-The client side of the connection. 127.0.0.1 is a special loop back address used to keep communication local (in the same OS). This uses the full TCP stack so it's not as efficient as using `-local`.
-- `-server 127.0.0.1`  
-The server side of the loop back connection.
-- `-port <port>`  
-Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
-- `-client <IP>`  
-The client side of the TCP connection. The IP address must be the same as the server side (`-server` side).
-- `-server <IP>`  
-The server side of the TCP connection. The IP address must be the same as the client side (`-client` side).
-- `-server Any`  
-The server side of the TCP connection. This allows the connection to occur on any IP interface that is listening on the specified port number. Since the client side must specify an IP address, this inherently defines the IP interface that will be used on the server side. Be careful to avoid multiple interfaces using the same port number.
-- `-reuse`  
-In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
-### Connectionless Specifications (one sided)
-These are one sided connections where only one side needs to be created to allow for unreliable UDP (user datagram protocol) transfers. Typically good for live-streaming services and IO devices where it's OK to periodically drop data.
-- Inter-process & inter-processor  
-`SocketDatagram -unicastSend -client <IP> -port <port>`  
-`SocketDatagram -unicastRecv -server <IP> -port <port> [-reuse]`  
-`SocketDatagram -multicastSend -server <IP> -group <IP> -port <port> [-disable_loopback] [-TTL <n>]`  
-`SocketDatagram -multicastRecv -server <IP> -group <IP> -port <port> [-reuse]`
-### Connectionless Parameter Descriptions
-- `-client <IP>`  
-The sender side of a UDP connection. The IP address must be where the datagrams will be sent to.
-- `-server <IP>`  
-The IP addr of the local interface of the UDP connection. If this is a unicast, then the IP address can be 'Any' which will listen for activity on any interface for the specified port number.
-- `-group <IP>`  
-The multicast group to join. The IP address must be in the range 224.0.0.0 through 239.255.255.255. Some are reserved so make sure to use an unused address.
-- `-port <port>`  
-Use a valid port number not being blocked by a firewall and not used by another service. This must be the same on both endpoints.
-- `-reuse`  
-In the case where a socket connection is shut down and then reused, it may not be usable immediately due to a socket timed wait state. If this occurs, then use this flag to allow the socket address to be reused.
-- `-disable_loopback`  
-By default, a multicast sender will also transfer the datagram to itself. Use this flag to stop this.
-- `-TTL <n>`  
-This defines how far down the network the multicast datagram will be sent:
-0:   Restricted to the same host
-1:   Restricted to the same subnet (this is the default value if the -TTL flag is not specified)
-32:  Restricted to the same site
-64:  Restricted to the same region
-128: Restricted to the same continent
-255: Unrestricted in scope
-## Application Header Files
-These will be needed by Takyon applications:
-- Core APIs: `Takyon/API/inc/takyon.h`
-- Open Source Extension APIs: `Takyon/extensions/takyon_extensions.h`
+If need to use a well known IP port number 'port' for connecting:
+```
+-client -IP=<IP> -port=<port>                 (can be use on either enpdpoint.
+                                               <IP> is the address of the remote server.)
+-server -IP=<IP> -port=<port> [-reuse]        (use this on the opposite endpoint as the client.
+                                               <IP> is the local IP inferface of this server.
+                                               -reuse is optional, and allows port number to be
+                                               reused without waiting in case of a failure.)
+-server -IP=Any -port=<port> [-reuse]         (Alternative, where IP address is auto detected
+                                               from activity on the port number)
+```
+If you want to let the system determine an unused (ephemeral) IP port number:
+```
+-client -IP=<IP> -ID=<id>                     (can be use on either enpdpoint.
+                                               <IP> is the address of the remote server.)
+-server -IP=<IP> -ID=<id>                     (use this on the opposite endpoint as the client.
+                                               <IP> is the local IP inferface of this server.)
+-server -IP=Any -ID=<id>                      (Alternative, where IP address is auto detected
+                                               from activity on the port number)
+```
+For the above ephemeral port number method, Takyon uses implicit multicast transfers to pass the ephemeral port from the server to the client. The following Takyon multicast defaults can be overridden by environment variables:
+```
+TAKYON_MULTICAST_IP    "127.0.0.1"            An IP interface that is multicast capable
+TAKYON_MULTICAST_PORT   6736                  Fun note: Uses phone digits to spell "Open"
+TAKYON_MULTICAST_GROUP "229.82.29.66"         Fun note: Uses phone digits to spell "Takyon"
+                                                        i.e. 229.TA.KY.ON
+TAKYON_MULTICAST_TTL    1                     Restricts multicasting to the same subnet
+```
+### OneSidedSocket
+Use this when Takyon needs to connect to a 3rd party TCP socket endpoint.
+```
+-client -IP=<IP> -port=<port>                 (Use this to connect to a 3rd party server.
+                                               <IP> is the address of the remote server.)
+-server -IP=<IP> -port=<port> [-reuse]        (Use this to connect to a 3rd party client.
+                                               <IP> is the local IP inferface of this server.
+                                               -reuse is optional, and allows port number to be
+                                               reused without waiting in case of a failure.)
+-server -IP=Any -port=<port> [-reuse]         (Alternative, where IP address is auto detected
+                                               from activity on the port number)
+```
+Restrictions:
+- Client must be endpoint A, and server must be endpoint B.
+- Multiple buffers can be used, but remote 3rd party side will just get data in order sent.
+- For receiving, takyonRecv()'s arguments for 'bytes' and 'offset' must not be NULL and must be set before calling takyonRecv(). This lets the socket know how much data to receive, and where to put it in the Takyon buffer.
 
-## Running the Examples
-- The examples are found in `Takyon/examples/`
-- Each example has a `README.txt` which explains what is does and how to build and run.
+### UnicastSendSocket
+Send UDP datagrams to a single endpoint:
+```
+-IP=<IP> -port=<port>                         (<IP> is IP address of the remote destination)
+```
+Restrictions:
+- Must be endpoint A.
+- Multiple buffers can be used, but remote side will not have any concept of the order or buffer indices.
+- The destination offset of takyonSend() must always be zero.
 
-## Overview of the Examples
-- hello_world_mt: The most basic Takyon application, specifically for two threads in a single process.
-- hello_world_mp: The most basic Takyon application, specifically for two processes (both are not required to be on the same processor).
-- hello_world_graph: The most basic Takyon application, designed to use the graph extension functions to make it more like MPI.
-- performance: Calculates the latency and throughput of any supported interconnect.
-- determinism: Shows the determinism of an interconnect via multple trasfer times displayed in a histogram.
-- fault_tolerant: Shows that connections can be broken (via timeouts, cable disconnection, or control-C) then recover from the failure.
-- barrier: Uses the graph extension functions to create a pipeline and barrier collective, where the barrier is used to synchronize the pipeline processing.
-- reduce: Uses the graph extension functions to create a reduction collective. The app defines the reduction operation. The results can optionally be broadcast to all threads involved.
-- pipeline: Uses the graph extension functions to create a long data processing path by connecting a set of Takyon paths in series.
-- scatter_gather: Uses the graph extension functions to create a collective example similar to MPI.
-- connectionless: Shows how Takyon can also be used with one sided connectionless interconnects (including multicast), such as live streaming and IO devices like GigE cameras, Lidar, analog-to-digital and digital-to-analog.
+### UnicastRecvSocket
+Receive UDP datagrams to a single endpoint:
+```
+-IP=<IP> -port=<port> [-reuse]                (<IP> is the local IP inferface of this receiver.
+                                               -reuse is optional, and allows port number to be
+                                               reused without waiting in case of a failure.)
+-IP=Any -port=<port> [-reuse]                 (Alternative, where IP address is auto detected
+                                               from activity on the port number)
+```
+Restrictions:
+- Must be endpoint B.
+- Data can be dropped, and order of data is not guaranteed.
+- Multiple buffers can be used, but this is not a coordination with the remote sender.
+- If takyonRecv() gets the offset, the offset will always be set to zero.
+
+### MulticastSendSocket
+Send UDP datagrams to a multicast group:
+```
+-IP=<IP> -group=<gIP> -port=<port>            (<IP> is address of a local IP interface.
+                                               <gIP> is the IP multicast address between
+                                               224.0.0.0 and 239.255.255.255; some of these
+                                               adresses are reserved)
+```
+Options:
+```
+-noLoopback                                   (By default, the multicast datagrams will be
+                                               looped back to this IP interface. Use this
+                                               flag to stop this.)
+-TTL=<n>                                      (Defines how far down the network the multicast
+                                               datagram will be sent:
+                                               0:   Same host
+                                               1:   Same subnet (default)
+                                               32:  Same site
+                                               64:  Same region
+                                               128: Same continent
+                                               255: Everywhere
+```
+Restrictions:
+- Must be endpoint A.
+- Multiple buffers can be used, but remote endpoints will not have any concept of the order or buffer indices.
+- The destination offset of takyonSend() must always be zero.
+
+### MulticastRecvSocket
+Receive UDP datagrams from a multicast group:
+```
+-IP=<IP> -group=<gIP> -port=<port> [-reuse]   (<IP> is the local IP inferface of this receiver.
+                                               <gIP> is the IP multicast address between
+                                               224.0.0.0 and 239.255.255.255; some of these
+                                               adresses are reserved.
+                                               -reuse is optional, and allows port number to be
+                                               reused without waiting in case of a failure.)
+
+```
+Restrictions:
+- Must be endpoint B.
+- Data can be dropped, and order of data is not guaranteed.
+- Multiple buffers can be used, but this is not a coordination with the multicast sender.
+- If takyonRecv() gets the offset, the offset will always be set to zero.
 
 ## The Evolution of Takyon
-The Takyon API was formulated by Michael Both after about 20 years of challenging experiences with communication APIs for heterogeneous compute architectures in the embedded HPC industry. He implemented applications using many standard communication APIs (Socket, MPI, Verbs, Network Direct, named memory map, message queue, semaphore, mutex, cond var, memcpy, corba), many company proprietary APIs (Abaco, Mercury, Ixthos, Texas Instruments, Sparc, Sky Computers, Radstone Technologies, Google, Apple), and on many different architectures (Sparc, PPC, Sharc, TI, Intel, Arm, iOS, Android). In addition to using all these communication APIs, he also implemented one high level open standard (Abaco's MPI 1.x) and two high level proprietary APIs (Lockheed Martin's GEDAE and Abaco's AXIS Flow). This vast experience gave a great insight into the strengths and weaknesses of each communication API. One API did not fit all the needs of the common embedded HPC application, and it became clear that a better standard was needed for this audience. Khronos was first approached in 2017 to see if Takyon should become an open standard. In 2018 Khronos decided to create an exploratory group to determine industry interest.
+The Takyon API was formulated by Michael Both after about 20 years of challenging experiences with communication APIs for heterogeneous compute architectures in the embedded HPC industry. He implemented applications using many standard communication APIs (Socket, MPI, Verbs, Network Direct, named memory map, message queue, semaphore, mutex, cond var, memcpy, corba), many company proprietary APIs (Abaco, Mercury, Ixthos, Texas Instruments, Sparc, Sky Computers, Radstone Technologies, Google, Apple), and on many different architectures (Sparc, PPC, Sharc, TI, Intel, Arm, iOS, Android). In addition to using all these communication APIs, he also implemented one high level open standard (Abaco's MPI 1.x) and two high level proprietary APIs (Lockheed Martin's GEDAE and Abaco's AXIS Flow). This vast experience gave a great insight into the strengths and weaknesses of each communication API. One API did not fit all the needs of the common embedded HPC application, and it became clear that a better standard was needed for this audience. Michael first approached Khronos in 2017 to see if Takyon should become an open standard. In 2018, Khronos decided to create an exploratory group to determine industry interest. In 2019, Khronos approved the formation of a working group to define the specification.

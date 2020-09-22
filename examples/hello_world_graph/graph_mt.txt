@@ -1,23 +1,24 @@
-ThreadGroups
-ThreadGroup: Hello
+Groups
+Group: Hello
   Instances: 2
 
 Processes
 Process: 0
-  Threads: Hello[0] Hello[1]
+  GroupIDs: Hello[0] Hello[1]
 
-MemoryBlocks
+Buffers
 
 Paths
 Defaults
   IsPolling: false, false
   AbortOnFailure: true, true
   Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
-  CreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  SendCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  RecvCompleteTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
-  DestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 1, 1
@@ -27,8 +28,8 @@ Defaults
   SenderAddrList: NULL, NULL
   RecverAddrList: NULL, NULL
 Path: 0
-  Thread: Hello[0], Hello[1]
-  InterconnectA: Memcpy -ID 1
-  InterconnectB: Memcpy -ID 1
+  Endpoints: Hello[0], Hello[1]
+  InterconnectA: InterThreadMemcpy -ID=1
+  InterconnectB: InterThreadMemcpy -ID=1
 
-CollectiveGroups
+Collectives

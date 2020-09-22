@@ -1,4 +1,4 @@
-// Copyright 2018 Abaco Systems
+// Copyright 2018,2020 Abaco Systems
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -26,9 +26,71 @@
 #include <ws2tcpip.h> // Need for inet_pton()
 #include "takyon_private.h"
 
-#define MAX_TEMP_FILENAME_CHARS (MAX_TAKYON_INTERCONNECT_CHARS+MAX_PATH+1)
+#define MAX_IP_ADDR_CHARS 40 // Good for IPv4 or IPv6
+#define MAX_TEMP_FILENAME_CHARS (TAKYON_MAX_INTERCONNECT_CHARS+MAX_PATH+1)
+#define MICROSECONDS_BETWEEN_CONNECT_ATTEMPTS 10000
 
 static pthread_once_t L_once_control = PTHREAD_ONCE_INIT;
+
+static bool hostnameToIpaddr(int address_family, const char *hostname, char *resolved_ip_addr, int max_chars, char *error_message) {
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof hints); // Zeroing the structure sets most of the flags to open ended
+//#define TEST_NAME_RESOLUTION
+#ifdef TEST_NAME_RESOLUTION
+  hints.ai_family = AF_UNSPEC;
+#else
+  hints.ai_family = address_family; // AF_INET6 to force IPv6, AF_INET to force IPv4, or AF_UNSPEC to allow for either
+#endif
+  hints.ai_socktype = 0;  // 0 = any type, Typical: SOCK_STREAM or SOCK_DGRAM
+  hints.ai_protocol = 0;  // 0 = any protocol
+  struct addrinfo *servinfo;
+  int status;
+  if ((status = getaddrinfo(hostname, "http", &hints, &servinfo)) != 0)  {
+    // Failed
+#ifdef TEST_NAME_RESOLUTION
+    printf("FAILED to find ip addr info for hostname '%s': %s\n", hostname, gai_strerror(status));
+#else
+    TAKYON_RECORD_ERROR(error_message, "Could not convert hostname '%s' to an IP address: %s\n", hostname, gai_strerror(status));
+#endif
+    return false;
+  }
+  // loop through all the results and connect to the first we can
+  bool found = false;
+  int index = 0;
+#ifdef TEST_NAME_RESOLUTION
+  printf("IP addresses for host: %s\n", hostname);
+#endif
+  for (struct addrinfo *p = servinfo; p != NULL; p = p->ai_next, index++) {
+    void *addr;
+    // Get the pointer to the address itself, different fields in IPv4 and IPv6
+    if (p->ai_family == AF_INET) {
+      // IPv4
+      struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+      addr = &(ipv4->sin_addr);
+    } else {
+      // IPv6
+      struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
+      addr = &(ipv6->sin6_addr);
+    }
+    if (inet_ntop(p->ai_family, addr, resolved_ip_addr, max_chars) == NULL) {
+#ifdef TEST_NAME_RESOLUTION
+      printf("  %d: %s FAILED TO GET IP ADDR: errno=%d\n", index, p->ai_family == AF_INET6 ? "IPv6" : "IPv4", errno);
+#else
+      TAKYON_RECORD_ERROR(error_message, "Could not convert hostname '%s' to an IP address: errno=%d\n", hostname, errno);
+#endif
+    } else {
+#ifdef TEST_NAME_RESOLUTION
+      printf("  %d: %s [%s]\n", index, p->ai_family == AF_INET6 ? "IPv6" : "IPv4", resolved_ip_addr);
+#else
+      found = true;
+      break;
+#endif
+    }
+  }
+  freeaddrinfo(servinfo); // all done with this structure
+  // NOTE: only the last IP address found is returned
+  return found;
+}
 
 static void windows_socket_finalize(void) {
   if (WSACleanup() != 0) {
@@ -56,6 +118,16 @@ static int windows_socket_manager_init(char *error_message) {
     TAKYON_RECORD_ERROR(error_message, "Failed to start Windows sockets\n");
     return false;
   }
+#ifdef TEST_NAME_RESOLUTION
+  char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+  hostnameToIpaddr(AF_INET, "10.3.45.234", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+  hostnameToIpaddr(AF_INET, "127.0.0.1", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+  hostnameToIpaddr(AF_INET, "localhost", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+  hostnameToIpaddr(AF_INET, "fakehost", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+  hostnameToIpaddr(AF_INET, "www.google.com", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+  hostnameToIpaddr(AF_INET, "www.nba.com", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+  hostnameToIpaddr(AF_INET, "www.comcast.net", resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message);
+#endif
   return true;
 }
 
@@ -75,11 +147,12 @@ static bool setSocketTimeout(TakyonSocket socket_fd, int timeout_name, int64_t t
   return true;
 }
 
-static bool socket_send_event_driven(TakyonSocket socket_fd, void *addr, size_t total_bytes_to_write, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+static bool socket_send_event_driven(TakyonSocket socket_fd, void *addr, size_t total_bytes_to_write, int64_t start_timeout_ns, int64_t finish_timeout_ns, bool *timed_out_ret, char *error_message) {
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Set the timeout on the socket
-  if (!setSocketTimeout(socket_fd, SO_SNDTIMEO, timeout_ns, error_message)) return false;
+  if (!setSocketTimeout(socket_fd, SO_SNDTIMEO, start_timeout_ns, error_message)) return false;
+  bool got_some_data = false;
 
   // Write the data
   size_t total_bytes_sent = 0;
@@ -121,15 +194,21 @@ static bool socket_send_event_driven(TakyonSocket socket_fd, void *addr, size_t 
       // There was some progress, so keep trying
       total_bytes_sent += bytes_written;
       addr = (void *)((char *)addr + bytes_written);
+      // See if the timeout should be updated
+      if (bytes_written > 0 && !got_some_data) {
+        got_some_data = true;
+        if (!setSocketTimeout(socket_fd, SO_SNDTIMEO, finish_timeout_ns, error_message)) return false;
+      }
     }
   }
 
   return true;
 }
 
-static bool socket_send_polling(TakyonSocket socket, void *addr, size_t total_bytes_to_write, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+static bool socket_send_polling(TakyonSocket socket, void *addr, size_t total_bytes_to_write, int64_t start_timeout_ns, int64_t finish_timeout_ns, bool *timed_out_ret, char *error_message) {
   if (timed_out_ret != NULL) *timed_out_ret = false;
   int64_t start_time = clockTimeNanoseconds();
+  bool got_some_data = false;
 
   size_t total_bytes_sent = 0;
   while (total_bytes_sent < total_bytes_to_write) {
@@ -144,6 +223,7 @@ static bool socket_send_polling(TakyonSocket socket, void *addr, size_t total_by
       int sock_error = WSAGetLastError();
       if (sock_error == WSAEWOULDBLOCK) {
         // Nothing written, but no errors
+        int64_t timeout_ns = (got_some_data) ? finish_timeout_ns : start_timeout_ns;
         if (timeout_ns >= 0) {
           int64_t ellapsed_time = clockTimeNanoseconds() - start_time;
           if (ellapsed_time >= timeout_ns) {
@@ -176,25 +256,31 @@ static bool socket_send_polling(TakyonSocket socket, void *addr, size_t total_by
       // There was some progress, so keep trying
       total_bytes_sent += bytes_written;
       addr = (void *)((char *)addr + bytes_written);
+      // See if the timeout needs to be updated
+      if (bytes_written > 0 && !got_some_data) {
+        start_time = clockTimeNanoseconds();
+        got_some_data = true;
+      }
     }
   }
 
   return true;
 }
 
-bool socketSend(TakyonSocket socket, void *addr, size_t bytes_to_write, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+bool socketSend(TakyonSocket socket, void *addr, size_t bytes_to_write, bool is_polling, int64_t start_timeout_ns, int64_t finish_timeout_ns, bool *timed_out_ret, char *error_message) {
   if (is_polling) {
-    return socket_send_polling(socket, addr, bytes_to_write, timeout_ns, timed_out_ret, error_message);
+    return socket_send_polling(socket, addr, bytes_to_write, start_timeout_ns, finish_timeout_ns, timed_out_ret, error_message);
   } else {
-    return socket_send_event_driven(socket, addr, bytes_to_write, timeout_ns, timed_out_ret, error_message);
+    return socket_send_event_driven(socket, addr, bytes_to_write, start_timeout_ns, finish_timeout_ns, timed_out_ret, error_message);
   }
 }
 
-static bool socket_recv_event_driven(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+static bool socket_recv_event_driven(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, int64_t start_timeout_ns, int64_t finish_timeout_ns, bool *timed_out_ret, char *error_message) {
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Set the timeout on the socket
-  if (!setSocketTimeout(socket_fd, SO_RCVTIMEO, timeout_ns, error_message)) return false;
+  if (!setSocketTimeout(socket_fd, SO_RCVTIMEO, start_timeout_ns, error_message)) return false;
+  bool got_some_data = false;
 
   char *data = data_ptr;
   size_t total_bytes_read = 0;
@@ -204,7 +290,7 @@ static bool socket_recv_event_driven(TakyonSocket socket_fd, void *data_ptr, siz
     int read_bytes = recv(socket_fd, data+total_bytes_read, bytes_to_read2, 0);
     if (read_bytes == 0) {
       // The socket was gracefully close
-      TAKYON_RECORD_ERROR(error_message, "Read side of socket seems to be closed\n");
+      TAKYON_RECORD_ERROR(error_message, "Remote side of socket has been closed\n");
       return false;
     } else if (read_bytes == SOCKET_ERROR) {
       int sock_error = WSAGetLastError();
@@ -234,14 +320,20 @@ static bool socket_recv_event_driven(TakyonSocket socket_fd, void *data_ptr, siz
       }
     }
     total_bytes_read += read_bytes;
+    // See if the timeout should be updated
+    if (read_bytes > 0 && !got_some_data) {
+      got_some_data = true;
+      if (!setSocketTimeout(socket_fd, SO_RCVTIMEO, finish_timeout_ns, error_message)) return false;
+    }
   }
 
   return true;
 }
 
-static bool socket_recv_polling(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+static bool socket_recv_polling(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, int64_t start_timeout_ns, int64_t finish_timeout_ns, bool *timed_out_ret, char *error_message) {
   if (timed_out_ret != NULL) *timed_out_ret = false;
   int64_t start_time = clockTimeNanoseconds();
+  bool got_some_data = false;
 
   char *data = data_ptr;
   size_t total_bytes_read = 0;
@@ -250,13 +342,14 @@ static bool socket_recv_polling(TakyonSocket socket_fd, void *data_ptr, size_t b
     int bytes_to_read2 = left_over > INT_MAX ? INT_MAX : (int)left_over;
     int read_bytes = recv(socket_fd, data+total_bytes_read, bytes_to_read2, 0);
     if (read_bytes == 0) {
-      // The socket was gracefully close
-      TAKYON_RECORD_ERROR(error_message, "Read side of socket seems to be closed\n");
+      // The socket was gracefully closed
+      TAKYON_RECORD_ERROR(error_message, "Remote side of socket has been closed\n");
       return false;
     } else if (read_bytes == SOCKET_ERROR) {
       int sock_error = WSAGetLastError();
       if (sock_error == WSAEWOULDBLOCK) {
         // Nothing read, but no errors
+        int64_t timeout_ns = (got_some_data) ? finish_timeout_ns : start_timeout_ns;
         if (timeout_ns >= 0) {
           int64_t ellapsed_time = clockTimeNanoseconds() - start_time;
           if (ellapsed_time >= timeout_ns) {
@@ -287,16 +380,21 @@ static bool socket_recv_polling(TakyonSocket socket_fd, void *data_ptr, size_t b
       }
     }
     total_bytes_read += read_bytes;
+    // See if the timeout should be updated
+    if (read_bytes > 0 && !got_some_data) {
+      start_time = clockTimeNanoseconds();
+      got_some_data = true;
+    }
   }
 
   return true;
 }
 
-bool socketRecv(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, bool is_polling, int64_t timeout_ns, bool *timed_out_ret, char *error_message) {
+bool socketRecv(TakyonSocket socket_fd, void *data_ptr, size_t bytes_to_read, bool is_polling, int64_t start_timeout_ns, int64_t finish_timeout_ns, bool *timed_out_ret, char *error_message) {
   if (is_polling) {
-    return socket_recv_polling(socket_fd, data_ptr, bytes_to_read, timeout_ns, timed_out_ret, error_message);
+    return socket_recv_polling(socket_fd, data_ptr, bytes_to_read, start_timeout_ns, finish_timeout_ns, timed_out_ret, error_message);
   } else {
-    return socket_recv_event_driven(socket_fd, data_ptr, bytes_to_read, timeout_ns, timed_out_ret, error_message);
+    return socket_recv_event_driven(socket_fd, data_ptr, bytes_to_read, start_timeout_ns, finish_timeout_ns, timed_out_ret, error_message);
   }
 }
 
@@ -358,8 +456,7 @@ static bool get_port_number_filename(const char *socket_name, char *port_number_
 }
 
 static bool socketSetNoDelay(TakyonSocket socket_fd, bool use_it, char *error_message) {
-  // NOTE: Makes no difference on OSX. Maybe it will on Linux.
-  // This will allow small messages to be set right away instead of letting the socket wait to buffer up 8k of data.
+  // This will allow small messages to be sent right away instead of letting the socket wait to buffer up 8k of data.
   BOOL use_no_delay = use_it ? 1 : 0;
   if (setsockopt(socket_fd, IPPROTO_TCP, TCP_NODELAY, (char *)&use_no_delay, sizeof(use_no_delay)) != 0) {
     TAKYON_RECORD_ERROR(error_message, "Failed to set socket to TCP_NODELAY. sock_error=%d\n", WSAGetLastError());
@@ -398,7 +495,7 @@ bool socketCreateLocalClient(const char *socket_name, TakyonSocket *socket_fd_re
         // Remote side not ready yet, Port number is still 0, so a retry will occur
       } else {
         // Read the port number
-        int tokens = fscanf(fp, "%hd", &port_number);
+        int tokens = fscanf(fp, "%hu", &port_number);
         if ((tokens != 1) || (port_number <= 0)) {
           // The file might be in the act of being created or destroyed.
           port_number = 0;
@@ -437,7 +534,7 @@ bool socketCreateLocalClient(const char *socket_name, TakyonSocket *socket_fd_re
       int sock_error = WSAGetLastError();
       /*+ check for EBADF? Test with reduce example: graph_mp.txt */
       if (sock_error != WSAECONNREFUSED) {
-        TAKYON_RECORD_ERROR(error_message, "Could not connect unix socket. sock_error=%d\n", sock_error);
+        TAKYON_RECORD_ERROR(error_message, "Could not connect local socket. sock_error=%d\n", sock_error);
         closesocket(socket_fd);
         return false;
       }
@@ -454,13 +551,13 @@ bool socketCreateLocalClient(const char *socket_name, TakyonSocket *socket_fd_re
       }
     }
     // Context switch out for a little time to allow remote side to get going.
-    int microseconds = 10000;
-    clockSleepYield(microseconds);
+    clockSleepYield(MICROSECONDS_BETWEEN_CONNECT_ATTEMPTS);
   }
 
-  // TCP sockets on Linux use the Nagle algorithm, so need to turn it off to get good performance.
+  // TCP sockets use the Nagle algorithm, so need to turn it off to get good performance.
   if (!socketSetNoDelay(socket_fd, 1, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Failed to set socket attribute\n");
+    closesocket(socket_fd);
     return false;
   }
 
@@ -474,9 +571,15 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSock
     return false;
   }
 
-  TakyonSocket socket_fd = 0;
+  // Resolve the IP address
+  char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+  if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+    return false;
+  }
 
   // Keep trying until a connection is made or timeout
+  TakyonSocket socket_fd = 0;
   int64_t start_time = clockTimeNanoseconds();
   while (1) {
     // Create a socket file descriptor
@@ -491,7 +594,7 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSock
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port_number);
-    int status = inet_pton(AF_INET, ip_addr, &server_addr.sin_addr);
+    int status = inet_pton(AF_INET, resolved_ip_addr, &server_addr.sin_addr);
     if (status == 0) {
       TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
       closesocket(socket_fd);
@@ -518,11 +621,10 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSock
           }
         }
         // Context switch out for a little time to allow remote side to get going.
-        int microseconds = 10000;
-        clockSleepYield(microseconds);
+        clockSleepYield(MICROSECONDS_BETWEEN_CONNECT_ATTEMPTS);
         // Try connecting again now
       } else {
-        TAKYON_RECORD_ERROR(error_message, "Could not connect unix socket. sock_error=%d\n", sock_error);
+        TAKYON_RECORD_ERROR(error_message, "Could not connect socket. sock_error=%d\n", sock_error);
         return false;
       }
     } else {
@@ -530,9 +632,10 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSock
     }
   }
 
-  // TCP sockets on Linux use the Nagle algorithm, so need to turn it off to get good performance.
+  // TCP sockets use the Nagle algorithm, so need to turn it off to get good performance.
   if (!socketSetNoDelay(socket_fd, 1, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Failed to set socket attribute\n");
+    closesocket(socket_fd);
     return false;
   }
 
@@ -541,7 +644,105 @@ bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, TakyonSock
   return true;
 }
 
-bool socketCreateLocalServer(const char *socket_name, bool allow_reuse, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message) {
+bool socketCreateEphemeralTcpClient(const char *ip_addr, const char *interconnect_name, uint32_t path_id, TakyonSocket *socket_fd_ret, int64_t timeout_ns, uint64_t verbosity, char *error_message) {
+  if (!windows_socket_manager_init(error_message)) {
+    return false;
+  }
+
+  int64_t start_time = clockTimeNanoseconds();
+
+  // Resolve the IP address
+  char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+  if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+    return false;
+  }
+
+  // Keep trying until a connection is made or timed out
+  TakyonSocket socket_fd = 0;
+  uint16_t ephemeral_port_number = 0;
+  while (1) {
+    // Wait for the ephemeral port number to get multicasted (this is in the while loop incase a stale port number is initially grabbed, and allows it to refresh)
+    bool timed_out = false;
+    ephemeral_port_number = ephemeralPortManagerGet(interconnect_name, path_id, timeout_ns, &timed_out, verbosity, error_message);
+    if (ephemeral_port_number == 0) {
+      if (timed_out) {
+        TAKYON_RECORD_ERROR(error_message, "TCP client socket timed out waiting for the ephemeral port number\n");
+      } else {
+        TAKYON_RECORD_ERROR(error_message, "TCP client socket failed to get an ephemeral port number\n");
+      }
+      return false;
+    }
+
+    // Create a socket file descriptor
+    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_fd == INVALID_SOCKET) {
+      TAKYON_RECORD_ERROR(error_message, "Could not create TCP socket. sock_error=%d\n", WSAGetLastError());
+      return false;
+    }
+
+    // Set up server connection info
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(ephemeral_port_number);
+    int status = inet_pton(AF_INET, resolved_ip_addr, &server_addr.sin_addr);
+    if (status == 0) {
+      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
+      closesocket(socket_fd);
+      return false;
+    } else if (status == -1) {
+      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. sock_error=%d\n", ip_addr, WSAGetLastError());
+      closesocket(socket_fd);
+      return false;
+    }
+
+    // Try to connect. If the server side is ready, then the connection will be made, otherwise the function will return with an error.
+    // NOTE: Even though the ephemeral port number has arrived, it does not guarantee the server is in the connect state
+    if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+      int sock_error = WSAGetLastError();
+      closesocket(socket_fd);
+      /*+ check for EBADF? Test with reduce example: graph_mp.txt */
+      if (sock_error == WSAECONNREFUSED) {
+        // Server side is not ready yet
+        int64_t ellapsed_time_ns = clockTimeNanoseconds() - start_time;
+        if (timeout_ns >= 0) {
+          if (ellapsed_time_ns >= timeout_ns) {
+            // Timed out
+            TAKYON_RECORD_ERROR(error_message, "Timed out waiting for connection\n");
+            return false;
+          }
+        }
+        // Context switch out for a little time to allow remote side to get going.
+        clockSleepYield(MICROSECONDS_BETWEEN_CONNECT_ATTEMPTS);
+        // Try connecting again now
+      } else {
+        TAKYON_RECORD_ERROR(error_message, "Could not connect socket. sock_error=%d\n", sock_error);
+        return false;
+      }
+    } else {
+      break;
+    }
+  }
+
+  // The connect is made
+
+  // Send out a message to let the other nodes know the path no longer needs the ephemeral port number
+  ephemeralPortManagerRemove(interconnect_name, path_id, ephemeral_port_number);
+
+  // TCP sockets use the Nagle algorithm, so need to turn it off to get good latency (at the expense of added network traffic and under utilized TCP packets).
+  if (!socketSetNoDelay(socket_fd, 1, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to set socket attribute\n");
+    closesocket(socket_fd);
+    return false;
+  }
+
+  *socket_fd_ret = socket_fd;
+
+  return true;
+}
+
+bool socketCreateLocalServer(const char *socket_name, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message) {
   if (!windows_socket_manager_init(error_message)) {
     return false;
   }
@@ -571,16 +772,7 @@ bool socketCreateLocalServer(const char *socket_name, bool allow_reuse, TakyonSo
     return false;
   }
 
-  if (allow_reuse) {
-    // This will allow a previously closed socket, that is still in the TIME_WAIT stage, to be used.
-    // This may accur if the application did not exit gracefully on a previous run.
-    BOOL allow = 1;
-    if (setsockopt(listening_fd, SOL_SOCKET, SO_REUSEADDR, (char *)&allow, sizeof(allow)) != 0) {
-      TAKYON_RECORD_ERROR(error_message, "Failed to set socket to SO_REUSEADDR. sock_error=%d\n", WSAGetLastError());
-      closesocket(listening_fd);
-      return false;
-    }
-  }
+  // IMPORTANT: SO_REUSEADDR should not be used with ephemeral port numbers
 
   // This is when the port number will be determined
   if (bind(listening_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
@@ -652,9 +844,12 @@ bool socketCreateLocalServer(const char *socket_name, bool allow_reuse, TakyonSo
     return false;
   }
 
-  // TCP sockets on Linux use the Nagle algorithm, so need to turn it off to get good performance.
+  // TCP sockets use the Nagle algorithm, so need to turn it off to get good performance.
   if (!socketSetNoDelay(socket_fd, 1, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Failed to set socket attribute\n");
+    remove(port_number_filename);
+    closesocket(listening_fd);
+    closesocket(socket_fd);
     return false;
   }
 
@@ -685,8 +880,15 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow
     // NOTE: htonl(INADDR_ANY) will allow any IP interface to listen
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   } else {
+    // Resolve the IP address
+    char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+    if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+      TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+      closesocket(listening_fd);
+      return false;
+    }
     // Listen on a specific IP interface
-    int status = inet_pton(AF_INET, ip_addr, &server_addr.sin_addr);
+    int status = inet_pton(AF_INET, resolved_ip_addr, &server_addr.sin_addr);
     if (status == 0) {
       TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
       closesocket(listening_fd);
@@ -729,7 +931,7 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow
   // You can now get the port number with ntohs(sin.sin_port).
   */
 
-  // Set the number of simultaneous connection that can be made
+  // Set the number of simultaneous connections that can be made
   if (listen(listening_fd, 1) == SOCKET_ERROR) {
     TAKYON_RECORD_ERROR(error_message, "Could not listen on TCP socket. sock_error=%d\n", WSAGetLastError());
     closesocket(listening_fd);
@@ -753,9 +955,11 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow
     return false;
   }
 
-  // TCP sockets on Linux use the Nagle algorithm, so need to turn it off to get good performance.
+  // TCP sockets use the Nagle algorithm, so need to turn it off to get good performance.
   if (!socketSetNoDelay(socket_fd, 1, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Failed to set socket attribute\n");
+    closesocket(listening_fd);
+    closesocket(socket_fd);
     return false;
   }
 
@@ -765,7 +969,111 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow
   return true;
 }
 
-bool pipeCreate(const char *pipe_name, int *read_pipe_fd_ret, int *write_pipe_fd_ret, char *error_message) {
+bool socketCreateEphemeralTcpServer(const char *ip_addr, const char *interconnect_name, uint32_t path_id, TakyonSocket *socket_fd_ret, int64_t timeout_ns, uint64_t verbosity, char *error_message) {
+  if (!windows_socket_manager_init(error_message)) {
+    return false;
+  }
+
+  TakyonSocket listening_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (listening_fd == INVALID_SOCKET) {
+    TAKYON_RECORD_ERROR(error_message, "Could not create TCP listening socket. sock_error=%d\n", WSAGetLastError());
+    return false;
+  }
+
+  // Create server connection info
+  struct sockaddr_in server_addr;
+  memset((char*)&server_addr, 0, sizeof(server_addr));
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(0); // NOTE: Use 0 to have the system find an unused port number
+  if (strcmp(ip_addr, "Any") == 0) {
+    // NOTE: htonl(INADDR_ANY) will allow any IP interface to listen
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  } else {
+    // Resolve the IP address
+    char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+    if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+      TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+      closesocket(listening_fd);
+      return false;
+    }
+    // Listen on a specific IP interface
+    int status = inet_pton(AF_INET, resolved_ip_addr, &server_addr.sin_addr);
+    if (status == 0) {
+      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
+      closesocket(listening_fd);
+      return false;
+    } else if (status == -1) {
+      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. sock_error=%d\n", ip_addr, WSAGetLastError());
+      closesocket(listening_fd);
+      return false;
+    }
+  }
+
+  // IMPORTANT: SO_REUSEADDR should not be used with ephemeral port numbers
+
+  if (bind(listening_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+    int sock_error = WSAGetLastError();
+    if (sock_error == WSAEADDRINUSE) {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind TCP socket. The address is already in use or in a time wait state. May need to use the option '-reuse'\n");
+    } else {
+      TAKYON_RECORD_ERROR(error_message, "Could not bind TCP socket. sock_error=%d\n", WSAGetLastError());
+    }
+    closesocket(listening_fd);
+    return false;
+  }
+
+  // If using an ephemeral port number, then use this to know the actual port number and pass it to the rest of the system
+  struct sockaddr_in sin;
+  socklen_t len = sizeof(sin);
+  if (getsockname(listening_fd, (struct sockaddr *)&sin, &len) == SOCKET_ERROR) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to get ephemeral port number from listening socket for IP addr (%s). sock_error=%d\n", ip_addr, WSAGetLastError());
+    closesocket(listening_fd);
+    return false;
+  }
+  uint16_t ephemeral_port_number = ntohs(sin.sin_port);
+
+  // Set the number of simultaneous connections that can be made
+  if (listen(listening_fd, 1) == SOCKET_ERROR) {
+    TAKYON_RECORD_ERROR(error_message, "Could not listen on TCP socket. sock_error=%d\n", WSAGetLastError());
+    closesocket(listening_fd);
+    return false;
+  }
+
+  // Multicast this out to all active Takyon endpoints
+  ephemeralPortManagerSet(interconnect_name, path_id, ephemeral_port_number, verbosity);
+
+  // Wait for a client to ask for a connection
+  if (timeout_ns >= 0) {
+    if (!wait_for_socket_read_activity(listening_fd, timeout_ns, error_message)) {
+      TAKYON_RECORD_ERROR(error_message, "Fail to listen for connection\n");
+      closesocket(listening_fd);
+      return false;
+    }
+  }
+
+  // This blocks until a connection is acctual made
+  TakyonSocket socket_fd = accept(listening_fd, NULL, NULL);
+  if (socket_fd == INVALID_SOCKET) {
+    TAKYON_RECORD_ERROR(error_message, "Could not accept TCP socket. sock_error=%d\n", WSAGetLastError());
+    closesocket(listening_fd);
+    return false;
+  }
+
+  // TCP sockets use the Nagle algorithm, so need to turn it off to get good performance.
+  if (!socketSetNoDelay(socket_fd, 1, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to set socket attribute\n");
+    closesocket(listening_fd);
+    closesocket(socket_fd);
+    return false;
+  }
+
+  closesocket(listening_fd);
+  *socket_fd_ret = socket_fd;
+
+  return true;
+}
+
+bool pipeCreate(int *read_pipe_fd_ret, int *write_pipe_fd_ret, char *error_message) {
   // IMPORTANT: Windows does not have pipes, so may need to poll on connection to see if it's disconnected
   *read_pipe_fd_ret = -1;
   *write_pipe_fd_ret = -1;
@@ -773,8 +1081,8 @@ bool pipeCreate(const char *pipe_name, int *read_pipe_fd_ret, int *write_pipe_fd
 }
 
 bool socketWaitForDisconnectActivity(TakyonSocket socket_fd, int read_pipe_fd, bool *got_socket_activity_ret, char *error_message) {
-  // NOTE: This function is used to detect when a socket close gracefull or not.
-  //       A pipe is not use here since on Window, the thread listening for disconnect will
+  // NOTE: This function is used to detect when a socket closes gracefull or not.
+  //       A pipe is not use here since on Windows, the thread listening for disconnect will
   //       wake up after the socket if gracefully closed, and then the thread can quit.
 
   int timeout_in_milliseconds = -1; // Wait forever
@@ -816,7 +1124,7 @@ bool pipeWakeUpSelect(int read_pipe_fd, int write_pipe_fd, char *error_message) 
   return true;
 }
 
-void pipeDestroy(const char *pipe_name, int read_pipe_fd, int write_pipe_fd) {
+void pipeDestroy(int read_pipe_fd, int write_pipe_fd) {
   // Nothing to do
 }
 
@@ -840,7 +1148,7 @@ bool socketBarrier(bool is_client, TakyonSocket socket_fd, int barrier_id, int64
 
   if (is_client) {
     // Wait for client to complete
-    if (!socketSend(socket_fd, &barrier_id, sizeof(barrier_id), is_polling, timeout_ns, &timed_out, error_message)) {
+    if (!socketSend(socket_fd, &barrier_id, sizeof(barrier_id), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
       TAKYON_RECORD_ERROR(error_message, "Client failed to send barrier value\n");
       return false;
     }
@@ -849,7 +1157,7 @@ bool socketBarrier(bool is_client, TakyonSocket socket_fd, int barrier_id, int64
       return false;
     }
     recved_barrier_id = 0;
-    if (!socketRecv(socket_fd, &recved_barrier_id, sizeof(recved_barrier_id), is_polling, timeout_ns, &timed_out, error_message)) {
+    if (!socketRecv(socket_fd, &recved_barrier_id, sizeof(recved_barrier_id), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
       TAKYON_RECORD_ERROR(error_message, "Client failed to get barrier value\n");
       return false;
     } else if ((timeout_ns >= 0) && (timed_out)) {
@@ -863,7 +1171,7 @@ bool socketBarrier(bool is_client, TakyonSocket socket_fd, int barrier_id, int64
   } else {
     // Wait for server to complete
     recved_barrier_id = 0;
-    if (!socketRecv(socket_fd, &recved_barrier_id, sizeof(recved_barrier_id), is_polling, timeout_ns, &timed_out, error_message)) {
+    if (!socketRecv(socket_fd, &recved_barrier_id, sizeof(recved_barrier_id), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
       TAKYON_RECORD_ERROR(error_message, "Server failed to get barrier value\n");
       return false;
     } else if ((timeout_ns >= 0) && (timed_out)) {
@@ -873,7 +1181,7 @@ bool socketBarrier(bool is_client, TakyonSocket socket_fd, int barrier_id, int64
       TAKYON_RECORD_ERROR(error_message, "Server failed to get proper barrier value. Got %d but expected %d\n", recved_barrier_id, barrier_id);
       return false;
     }
-    if (!socketSend(socket_fd, &barrier_id, sizeof(barrier_id), is_polling, timeout_ns, &timed_out, error_message)) {
+    if (!socketSend(socket_fd, &barrier_id, sizeof(barrier_id), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
       TAKYON_RECORD_ERROR(error_message, "Server failed to send barrier value\n");
       return false;
     }
@@ -891,7 +1199,7 @@ bool socketSwapAndVerifyInt(TakyonSocket socket_fd, int value, int64_t timeout_n
   bool timed_out;
 
   // Send value to remote side
-  if (!socketSend(socket_fd, &value, sizeof(value), is_polling, timeout_ns, &timed_out, error_message)) {
+  if (!socketSend(socket_fd, &value, sizeof(value), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Client failed to send comparison value\n");
     return false;
   }
@@ -902,7 +1210,7 @@ bool socketSwapAndVerifyInt(TakyonSocket socket_fd, int value, int64_t timeout_n
 
   // Get remote value
   int recved_value = 0;
-  if (!socketRecv(socket_fd, &recved_value, sizeof(recved_value), is_polling, timeout_ns, &timed_out, error_message)) {
+  if (!socketRecv(socket_fd, &recved_value, sizeof(recved_value), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Client failed to get comparison value\n");
     return false;
   } else if ((timeout_ns >= 0) && (timed_out)) {
@@ -921,7 +1229,7 @@ bool socketSwapAndVerifyUInt64(TakyonSocket socket_fd, uint64_t value, int64_t t
   bool timed_out;
 
   // Send value to remote side
-  if (!socketSend(socket_fd, &value, sizeof(value), is_polling, timeout_ns, &timed_out, error_message)) {
+  if (!socketSend(socket_fd, &value, sizeof(value), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Client failed to send comparison value\n");
     return false;
   }
@@ -932,7 +1240,7 @@ bool socketSwapAndVerifyUInt64(TakyonSocket socket_fd, uint64_t value, int64_t t
 
   // Get remote value
   uint64_t recved_value = 0;
-  if (!socketRecv(socket_fd, &recved_value, sizeof(recved_value), is_polling, timeout_ns, &timed_out, error_message)) {
+  if (!socketRecv(socket_fd, &recved_value, sizeof(recved_value), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Client failed to get comparison value\n");
     return false;
   } else if ((timeout_ns >= 0) && (timed_out)) {
@@ -951,7 +1259,7 @@ bool socketSendUInt64(TakyonSocket socket_fd, uint64_t value, int64_t timeout_ns
   bool timed_out;
 
   // Send value to remote side
-  if (!socketSend(socket_fd, &value, sizeof(value), is_polling, timeout_ns, &timed_out, error_message)) {
+  if (!socketSend(socket_fd, &value, sizeof(value), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Client failed to send comparison value\n");
     return false;
   }
@@ -967,7 +1275,7 @@ bool socketRecvUInt64(TakyonSocket socket_fd, uint64_t *value_ret, int64_t timeo
   bool timed_out;
 
   // Get remote value
-  if (!socketRecv(socket_fd, value_ret, sizeof(uint64_t), is_polling, timeout_ns, &timed_out, error_message)) {
+  if (!socketRecv(socket_fd, value_ret, sizeof(uint64_t), is_polling, timeout_ns, timeout_ns, &timed_out, error_message)) {
     TAKYON_RECORD_ERROR(error_message, "Client failed to get comparison value\n");
     return false;
   } else if ((timeout_ns >= 0) && (timed_out)) {
@@ -1060,7 +1368,7 @@ static bool datagram_send_event_driven(TakyonSocket socket_fd, void *sock_in_add
       if (sock_error == WSAEMSGSIZE) {
         TAKYON_RECORD_ERROR(error_message, "Failed to send datagram message. %lld bytes exceeds the allowable datagram size\n", (long long)bytes_to_write);
         return false;
-      } else if (sock_error == WSAEWOULDBLOCK) {
+      } else if (sock_error == WSAEWOULDBLOCK) { /*+ may need to also check WSAENETUNREACH which seems to be temporary, but probably still need to report as error */
         // Timed out
         if (timed_out_ret != NULL) {
           *timed_out_ret = true;
@@ -1108,12 +1416,13 @@ static bool datagram_recv_event_driven(TakyonSocket socket_fd, void *data_ptr, s
     }
     if (bytes_received == 0) {
       // Socket was probably closed by the remote side
-      TAKYON_RECORD_ERROR(error_message, "Read side of socket seems to be closed\n");
+      TAKYON_RECORD_ERROR(error_message, "Remote side of socket has been closed\n");
       return false;
     }
     if (bytes_received == SOCKET_ERROR) {
       int sock_error = WSAGetLastError();
-      if (sock_error == WSAEWOULDBLOCK) {
+      //*+*/printf("WSAEWOULDBLOCK=%d, WSAETIMEDOUT=%d, sock_error=%d\n", WSAEWOULDBLOCK, WSAETIMEDOUT, sock_error);
+      if (sock_error == WSAEWOULDBLOCK || sock_error == WSAETIMEDOUT) {
         // Timed out
         if (timed_out_ret != NULL) {
           *timed_out_ret = true;
@@ -1152,7 +1461,7 @@ static bool datagram_recv_polling(TakyonSocket socket_fd, void *data_ptr, size_t
     }
     if (bytes_received == 0) {
       // Socket was probably closed by the remote side
-      TAKYON_RECORD_ERROR(error_message, "Read side of socket seems to be closed\n");
+      TAKYON_RECORD_ERROR(error_message, "Remote side of socket has been closed\n");
       return false;
     }
     if (bytes_received == SOCKET_ERROR) {
@@ -1188,32 +1497,44 @@ bool socketCreateUnicastSender(const char *ip_addr, uint16_t port_number, Takyon
     return false;
   }
 
+  // Resolve the IP address
+  char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+  if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+    return false;
+  }
+
   // Create a datagram socket on which to send.
   TakyonSocket socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (socket_fd < 0) {
+  if (socket_fd == INVALID_SOCKET) {
     TAKYON_RECORD_ERROR(error_message, "Failed to create datagram sender socket: error=%d\n", WSAGetLastError());
     return false;
   }
 
+  // Allocate structure to hold socket address information
   struct sockaddr_in *sock_in_addr = malloc(sizeof(struct sockaddr_in));
   if (sock_in_addr == NULL) {
     TAKYON_RECORD_ERROR(error_message, "Out of memory\n");
     closesocket(socket_fd);
     return false;
   }
+
+  // Fill in the structure describing the destination
   memset((char *)sock_in_addr, 0, sizeof(struct sockaddr_in));
 #ifdef __APPLE__
   sock_in_addr->sin_len = sizeof(struct sockaddr_in);
 #endif
   sock_in_addr->sin_family = AF_INET;
-  int status = inet_pton(AF_INET, ip_addr, &sock_in_addr->sin_addr);
+  int status = inet_pton(AF_INET, resolved_ip_addr, &sock_in_addr->sin_addr);
   if (status == 0) {
     TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
     closesocket(socket_fd);
+    free(sock_in_addr);
     return false;
   } else if (status == -1) {
     TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. sock_error=%d\n", ip_addr, WSAGetLastError());
     closesocket(socket_fd);
+    free(sock_in_addr);
     return false;
   }
   sock_in_addr->sin_port = htons(port_number);
@@ -1238,7 +1559,7 @@ bool socketCreateUnicastReceiver(const char *ip_addr, uint16_t port_number, bool
 
   // Create a datagram socket on which to receive.
   TakyonSocket socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (socket_fd < 0) {
+  if (socket_fd == INVALID_SOCKET) {
     TAKYON_RECORD_ERROR(error_message, "Failed to create datagram socket: error=%d\n", WSAGetLastError());
     return false;
   }
@@ -1256,8 +1577,15 @@ bool socketCreateUnicastReceiver(const char *ip_addr, uint16_t port_number, bool
     // NOTE: htonl(INADDR_ANY) will allow any IP interface to listen
     localSock.sin_addr.s_addr = htonl(INADDR_ANY);
   } else {
+    // Resolve the IP address
+    char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+    if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+      TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+      closesocket(socket_fd);
+      return false;
+    }
     // Listen on a specific IP interface
-    int status = inet_pton(AF_INET, ip_addr, &localSock.sin_addr);
+    int status = inet_pton(AF_INET, resolved_ip_addr, &localSock.sin_addr);
     if (status == 0) {
       TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
       closesocket(socket_fd);
@@ -1310,9 +1638,16 @@ bool socketCreateMulticastSender(const char *ip_addr, const char *multicast_grou
     return false;
   }
 
+  // Resolve the IP address
+  char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+  if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+    return false;
+  }
+
   // Create a datagram socket on which to send.
   TakyonSocket socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (socket_fd < 0) {
+  if (socket_fd == INVALID_SOCKET) {
     TAKYON_RECORD_ERROR(error_message, "Failed to create datagram sender socket: error=%d\n", WSAGetLastError());
     return false;
   }
@@ -1341,7 +1676,7 @@ bool socketCreateMulticastSender(const char *ip_addr, const char *multicast_grou
   // The IP address specified must be associated with a local, multicast capable interface.
   {
     struct in_addr localInterface;
-    int status = inet_pton(AF_INET, ip_addr, &localInterface.s_addr);
+    int status = inet_pton(AF_INET, resolved_ip_addr, &localInterface.s_addr);
     if (status == 0) {
       TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
       closesocket(socket_fd);
@@ -1375,13 +1710,15 @@ bool socketCreateMulticastSender(const char *ip_addr, const char *multicast_grou
     }
   }
 
-  // Set the multicast address
+  // Allocate the multicast address structure
   struct sockaddr_in *sock_in_addr = malloc(sizeof(struct sockaddr_in));
   if (sock_in_addr == NULL) {
     TAKYON_RECORD_ERROR(error_message, "Out of memory\n");
     closesocket(socket_fd);
     return false;
   }
+
+  // Fill in the structure
   memset((char *)sock_in_addr, 0, sizeof(struct sockaddr_in));
 #ifdef __APPLE__
   sock_in_addr->sin_len = sizeof(struct sockaddr_in);
@@ -1391,10 +1728,12 @@ bool socketCreateMulticastSender(const char *ip_addr, const char *multicast_grou
   if (status == 0) {
     TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
     closesocket(socket_fd);
+    free(sock_in_addr);
     return false;
   } else if (status == -1) {
     TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. sock_error=%d\n", ip_addr, WSAGetLastError());
     closesocket(socket_fd);
+    free(sock_in_addr);
     return false;
   }
   sock_in_addr->sin_port = htons(port_number);
@@ -1409,9 +1748,16 @@ bool socketCreateMulticastReceiver(const char *ip_addr, const char *multicast_gr
     return false;
   }
 
+  // Resolve the IP address
+  char resolved_ip_addr[MAX_IP_ADDR_CHARS];
+  if (!hostnameToIpaddr(AF_INET, ip_addr, resolved_ip_addr, MAX_IP_ADDR_CHARS, error_message)) {
+    TAKYON_RECORD_ERROR(error_message, "Could not resolve IP address '%s'\n", ip_addr);
+    return false;
+  }
+
   // Create a datagram socket on which to receive.
   TakyonSocket socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (socket_fd < 0) {
+  if (socket_fd == INVALID_SOCKET) {
     TAKYON_RECORD_ERROR(error_message, "Failed to create multicast socket: error=%d\n", WSAGetLastError());
     return false;
   }
@@ -1459,15 +1805,15 @@ bool socketCreateMulticastReceiver(const char *ip_addr, const char *multicast_gr
     struct ip_mreq group;
     int status = inet_pton(AF_INET, multicast_group, &group.imr_multiaddr);
     if (status == 0) {
-      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
+      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", multicast_group);
       closesocket(socket_fd);
       return false;
     } else if (status == -1) {
-      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. sock_error=%d\n", ip_addr, WSAGetLastError());
+      TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. sock_error=%d\n", multicast_group, WSAGetLastError());
       closesocket(socket_fd);
       return false;
     }
-    status = inet_pton(AF_INET, ip_addr, &group.imr_interface);
+    status = inet_pton(AF_INET, resolved_ip_addr, &group.imr_interface);
     if (status == 0) {
       TAKYON_RECORD_ERROR(error_message, "Could not get the IP address from the hostname '%s'. Invalid name.\n", ip_addr);
       closesocket(socket_fd);
