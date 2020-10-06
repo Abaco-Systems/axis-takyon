@@ -22,7 +22,7 @@ Takyon is a high level, high speed, portable, dynamic, fully scalable, point to 
 - Better determinism: once a path is created, there's no implicit extra transfers, extra synchronization, memory allocations, or memory registrations
 - Fault tolerant ready at the application level: all communication paths are independent of each other, can be created or destroyed at any time, all failures are reported to the application, and timeouts are provided for all stages of communication
 - Unconnected communications (unicast & multicast datagrams) where data can be dropped
-- Can be used with IO devices: cameras, lidar, A2D converter, D2A converter, etc.
+- Can be used to communicate with IO devices: cameras, lidar, A2D converter, D2A converter, etc.
 
 Takyon provides an application with a one stop shop for all point to point message passing needs no mater the interconnect or locality (inter-thread, inter-process, inter-processor, intra-application, inter-application).
 
@@ -138,7 +138,8 @@ Before running any examples, the Takyon core libraries must be built.
 *Tested on Ubuntu 16.04, 18.04 64-bit Intel using gcc, but should work on most other Linux flavors and chip architectures.*
 ```
 > cd Takyon/API/builds/linux
-> make
+> make                  # No CUDA integration
+> make WITH_CUDA=Yes    # Allows some interconnects to optionally use CUDA memory buffers
 ```
 This creates:
 ```
@@ -178,7 +179,8 @@ c:/pthreads4w/install/bin/
 Now you can build the Takyon library:
 ```
 > cd Takyon\API\builds\windows
-> nmake
+> nmake                  # No CUDA integration
+> nmake WITH_CUDA=Yes    # Allows some interconnects to optionally use CUDA memory buffers
 ```
 This creates:
 ```
@@ -225,13 +227,14 @@ Some Key Techniques:
 
 Graph Based (more like MPI; data flow is defined in config file to avoid hard coding in the application):
 - **hello_world_graph**: A simple example of how to use the graph file
+- **hello_world_cuda**: A simple example of how to use CUDA mixed with CPU memory buffers
 - **barrier**: Uses a barrier to synchronize the pipeline processing
 - **reduce**: Does an app defined reduction (in this case: max) and optionally passes the result to all endpoints
 - **pipeline**: Pipeline style processing where paths are connected in series
 - **scatter_gather**: Scatters from a single contiguous buffer, processes, then gathers into a single contiguous buffer
 
 ## Supported Interconnects
-This reference implementation supports commonly used mechanisms for inter-thread, inter-process and inter-processor communication. Abaco's commercial implementation supports additional communication protocols including RDMA, GPUDirect, and GPU IPC.
+This reference implementation supports commonly used communication interfaces for inter-thread, inter-process and inter-processor communication. Abaco's commercial implementation supports additional interconnects including RDMA with GPUDirect.
 
 ### InterThreadMemcpy
 Endpoints must be in the same process but different threads. Uses Posix mutexes and conditional variables to handle synchronization of memcpy() transfers.
@@ -240,13 +243,21 @@ Required arguments:
 ```
 -ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
 ```
-
+Optional arguments:
+```
+-srcCudaDeviceId=<id>         (For Takyon managed source buffers, allocate on CUDA device <id>)
+-destCudaDeviceId=<id>        (For Takyon managed destination buffers, allocate on CUDA device <id>)
+```
 ### InterThreadPointer
 Endpoints must be in the same process but different threads. Uses Posix mutexes and conditional variables to handle synchronization of pointers to shared blocks of memory (shared by the sender and receiver).
 
 Required arguments:
 ```
 -ID=<integer>                 (<integer> can be any value, must be the same on both endpoints)
+```
+Optional arguments:
+```
+-destCudaDeviceId=<id>        (For Takyon managed destination buffers, allocate on CUDA device <id>)
 ```
 ### InterProcessMemcpy
 Endpoints must be in the same OS but different processes. Uses local sockets to coordinate path creation, path destruction, and synchronization of memcpy() transfers. The receive buffers are shared memory maps.
@@ -257,11 +268,12 @@ Required arguments:
 ```
 Optional Arguments;
 ```
--appAllocedRecvMmap           (Use this if the app manually allocates shared MMAP receive
-                               buffers. Use the naming format "<name><index>", where <index>
-                               starts from 0, one per buffer.)
--remoteMmapPrefix=<name>      (If the remote side manually allocates shared receive MMAP
-                               buffers, then need the prefix name.)
+-recverAddrMmapNamePrefix=<name>  (If the application allocates the destination buffers, which
+                                   must be named shared memory, then the names must follow the
+                                   format: "<name><buffer_index>". This only needs to be
+                                   specified on the endpoint allocating the memory.)
+-srcCudaDeviceId=<id>         (For Takyon managed source buffers, allocate on CUDA device <id>)
+-destCudaDeviceId=<id>        (For Takyon managed destination buffers, allocate on CUDA device <id>)
 ```
 
 ### InterProcessPointer
@@ -273,11 +285,11 @@ Required arguments:
 ```
 Optional Arguments;
 ```
--appAllocedRecvMmap           (Use this if the app manually allocates shared MMAP receive
-                               buffers. Use the name format "<name><index>", where <index>
-                               starts from 0, one per buffer.)
--remoteMmapPrefix=<name>      (If the remote side manually allocates shared receive MMAP
-                               buffers, then need the prefix name.)
+-recverAddrMmapNamePrefix=<name>  (If the application allocates the destination buffers, which
+                                   must be named shared memory, then the names must follow the
+                                   format: "<name><buffer_index>". This only needs to be
+                                   specified on the endpoint allocating the memory.)
+-destCudaDeviceId=<id>        (For Takyon managed destination buffers, allocate on CUDA device <id>)
 ```
 
 ### InterProcessSocket

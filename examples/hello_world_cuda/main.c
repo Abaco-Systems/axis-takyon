@@ -11,6 +11,7 @@
 
 #include "takyon_extensions.h"
 #include "hello.h"
+#include <cuda_runtime.h>
 
 static TakyonGraph *L_graph = NULL;
 
@@ -32,6 +33,17 @@ void *appAllocateMemory(const char *name, const char *where, uint64_t bytes, voi
     *user_data_ret = NULL;
     void *addr = malloc(bytes);
     return addr;
+  } else if (strncmp(where, "CUDA:", 5) == 0) {
+    // Allocate CUDA memory
+    *user_data_ret = NULL;
+    int cuda_device_id;
+    if (sscanf(where, "CUDA:%d", &cuda_device_id) != 1) { fprintf(stderr, "%s (line %d): %s does not define a valid CUDA device ID, format should be 'CUDA:<id>'\n", __FILE__, __LINE__, where); exit(EXIT_FAILURE); }
+    cudaError_t cuda_status = cudaSetDevice(cuda_device_id);
+    if (cuda_status != cudaSuccess) { fprintf(stderr, "%s (line %d): Failed to set CUDA device ID to %d\n", __FILE__, __LINE__, cuda_device_id); exit(EXIT_FAILURE); }
+    void *addr = NULL;
+    cuda_status = cudaMalloc(&addr, bytes);
+    if (cuda_status != cudaSuccess) { fprintf(stderr, "%s (line %d): Failed to allocate %ju bytes from CUDA memory on device %d\n", __FILE__, __LINE__, bytes, cuda_device_id); exit(EXIT_FAILURE); }
+    return addr;
   } else if (strcmp(where, "MMAP") == 0) {
     // Allocate memory that can be shared by different processes
     char map_name[TAKYON_MAX_MMAP_NAME_CHARS];
@@ -46,8 +58,14 @@ void *appAllocateMemory(const char *name, const char *where, uint64_t bytes, voi
 }
 
 void appFreeMemory(const char *where, void *user_data, void *addr) {
-  if (strcmp(where, "CPU") == 0) free(addr);
-  else if (strcmp(where, "MMAP") == 0) takyonMmapFree((TakyonMmapHandle)user_data);
+  if (strcmp(where, "CPU") == 0) {
+    free(addr);
+  } else if (strncmp(where, "CUDA:", 5) == 0) {
+    cudaError_t cuda_status = cudaFree(addr);
+    if (cuda_status != cudaSuccess) { fprintf(stderr, "%s (line %d): Failed to free CUDA memory\n", __FILE__, __LINE__); exit(EXIT_FAILURE); }
+  } else if (strcmp(where, "MMAP") == 0) {
+    takyonMmapFree((TakyonMmapHandle)user_data);
+  }
 }
 
 int main(int argc, char **argv) {
@@ -62,6 +80,9 @@ int main(int argc, char **argv) {
   printf("Loading graph description '%s'...\n", filename);
   L_graph = takyonLoadGraphDescription(process_id, filename);
   takyonPrintGraph(L_graph);
+
+  // IMPORTANT: Detect if using a shared memory interconnect
+  G_interconnect_is_shared_pointer = (strstr(filename, "shared") != NULL);
 
   // Start the threads
   for (int i=0; i<L_graph->process_list[process_id].thread_count; i++) {

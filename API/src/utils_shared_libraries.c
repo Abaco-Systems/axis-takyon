@@ -214,7 +214,7 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     setMulticastSendSocketFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "MulticastRecvSocket") == 0) {
     setMulticastRecvSocketFunctionPointers(private_path);
-#ifdef BUILD_RDMA
+#ifdef WITH_RDMA
   } else if (strcmp(interconnect_module, "Rdma") == 0) {
     setRdmaFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "UnicastSendRdma") == 0) {

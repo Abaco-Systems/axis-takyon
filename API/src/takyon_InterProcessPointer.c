@@ -30,13 +30,21 @@
 
 typedef struct {
   uint64_t remote_max_recver_bytes; // Only used by the sender
-  bool sender_addr_alloced;
   bool recver_addr_alloced;
+#ifdef WITH_CUDA
+  bool recver_is_cuda_addr;
+  cudaEvent_t recver_cuda_event;
+#endif
   size_t sender_addr;
   size_t local_recver_addr;
+  char local_recver_mmap_name[MAX_MMAP_NAME_CHARS];
+#ifdef WITH_CUDA
+  bool remote_recver_is_cuda;
+  cudaEvent_t remote_recver_cuda_event;
+#endif
   size_t remote_recver_addr;
-  MmapHandle local_mmap_app;    // Data memory (creator)
-  MmapHandle remote_mmap_app;   // Data memory (slave, even if allocated by app)
+  MmapHandle local_mmap_handle;    // Data memory (creator)
+  MmapHandle remote_mmap_handle;   // Data memory (remote, even if allocated by app)
   bool send_started;
   bool got_data;
   uint64_t recved_bytes;
@@ -62,7 +70,7 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
     return false;
   }
 
-  // Error checking
+  // Since the source and dest buffers are the same buffer, make sure the offsets are the same
   if (src_offset != dest_offset) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "The source offset=%lld and destination offset=%lld are not the same.\n", (unsigned long long)src_offset, (unsigned long long)dest_offset);
     return false;
@@ -74,7 +82,19 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
     return false;
   }
 
-  // Transfer the data (just a pointer passing)
+  // Transfer the data (just a pointer passing so no actual transfer)
+  if (bytes > 0) {
+#ifdef WITH_CUDA
+    // IMPORTANT: cudaMemcpy() is not synchronous of the remote memory is GPU
+    // Notify remote side that the cudaMemcpy() transfer is complete on the sender side
+    if (buffer->remote_recver_is_cuda) {
+      if (!cudaEventNotify(&buffers->send_buffer_list[buffer_index].remote_recver_cuda_event, path->attrs.error_message)) {
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to notify recver that transfer is complete via CUDA event\n");
+        return false;
+      }
+    }
+#endif
+  }
   buffer->send_started = true;
 
   // Send the header and signal together via the socket
@@ -211,6 +231,17 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
       return false;
     }
 
+#ifdef WITH_CUDA
+    // The header was sent by the socket, but the CUDA transfer might not yet be complete, need to wait for the CUDA event
+    if (recved_bytes > 0 && recver_buffer->recver_is_cuda_addr) {
+      if (!cudaEventWait(&recver_buffer->recver_cuda_event, path->attrs.error_message)) {
+        buffers->connected = false;
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to wait for the CUDA event on buffer %d, which notifies if the sender completed the transfer.\n", recved_buffer_index);
+        return false;
+      }
+    }
+#endif
+
     if (recved_buffer_index == buffer_index) {
       // Got the data in the expected buffer index
       if (bytes_ret != NULL) *bytes_ret = recved_bytes;
@@ -237,31 +268,76 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
   return true;
 }
 
-static void freePathResources(TakyonPath *path) {
+static bool freePathMemoryResources(TakyonPath *path) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
   PathBuffers *buffers = (PathBuffers *)private_path->private_data;
 
-  // Free the buffers (the posix buffers are always allocated on the recieve side)
+  // Free the send side buffers (the posix buffers are always allocated on the recieve side)
   if (buffers->send_buffer_list != NULL) {
     int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
     for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
       // Free the handle to the remote destination buffers
-      if (buffers->send_buffer_list[buf_index].remote_mmap_app != NULL) {
-        mmapFree(buffers->send_buffer_list[buf_index].remote_mmap_app, path->attrs.error_message);
+      if (buffers->send_buffer_list[buf_index].remote_recver_addr != 0) {
+        if (buffers->send_buffer_list[buf_index].remote_mmap_handle != NULL) {
+          if (!mmapFree(buffers->send_buffer_list[buf_index].remote_mmap_handle, path->attrs.error_message)) {
+            TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to release the remote buffer mapping\n");
+            return false;
+          }
+        }
+#ifdef WITH_CUDA
+        if (buffers->send_buffer_list[buf_index].remote_recver_is_cuda) {
+          void *remote_cuda_addr = (void *)buffers->send_buffer_list[buf_index].remote_recver_addr;
+          if (!cudaReleaseRemoteIpcMappedAddr(remote_cuda_addr, path->attrs.error_message)) {
+            TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to release the remote CUDA buffer mapping\n");
+            return false;
+          }
+        }
+#endif
       }
+      // IMPORTANT: No send buffers to free, since there are only dest buffers
     }
     free(buffers->send_buffer_list);
   }
+
+  // Free the recv side buffers (the posix buffers are always allocated on the recieve side)
   if (buffers->recv_buffer_list != NULL) {
     int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
     for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
+#ifdef WITH_CUDA
+      // Free CUDA events for takyon managed and application created CUDA memory
+      uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
+      if (recver_bytes > 0 && buffers->recv_buffer_list[buf_index].recver_is_cuda_addr) {
+        if (!cudaEventFree(&buffers->recv_buffer_list[buf_index].recver_cuda_event, path->attrs.error_message)) {
+          TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to free recv CUDA event\n");
+          return false;
+        }
+      }
+#endif
       // Free the local destination buffers
-      if (buffers->recv_buffer_list[buf_index].recver_addr_alloced && buffers->recv_buffer_list[buf_index].local_mmap_app != NULL) {
-        mmapFree(buffers->recv_buffer_list[buf_index].local_mmap_app, path->attrs.error_message);
+      if (buffers->recv_buffer_list[buf_index].recver_addr_alloced) {
+        if (buffers->recv_buffer_list[buf_index].local_mmap_handle != NULL) {
+          if (!mmapFree(buffers->recv_buffer_list[buf_index].local_mmap_handle, path->attrs.error_message)) {
+            TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to release the local MMAP buffer mapping\n");
+            return false;
+          }
+        }
+#ifdef WITH_CUDA
+        if (buffers->recv_buffer_list[buf_index].recver_is_cuda_addr && buffers->recv_buffer_list[buf_index].local_recver_addr != 0) {
+          if (!cudaMemoryFree((void *)buffers->recv_buffer_list[buf_index].local_recver_addr, path->attrs.error_message)) {
+            TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to free recv CUDA buffer\n");
+            return false;
+          }
+        }
+#endif
       }
     }
     free(buffers->recv_buffer_list);
   }
+
+  // Free the private handle
+  free(buffers);
+
+  return true;
 }
 
 GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
@@ -298,13 +374,17 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
     }
   }
 
+  // Sleep here or else remote side might error out from a disconnect message while the remote process completing it's last transfer and waiting for any TCP ACKs to validate a complete transfer
+  clockSleepYield(MICROSECONDS_TO_SLEEP_BEFORE_DISCONNECTING);
+
   // Close the socket
   socketClose(buffers->socket_fd);
 
   // Free the shared memory resources
-  freePathResources(path);
-  // Free the private handle
-  free(buffers);
+  if (!freePathMemoryResources(path)) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Free memory resources failed\n");
+    graceful_disconnect_ok = false;
+  }
 
   // Vebosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
@@ -317,7 +397,104 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
   return graceful_disconnect_ok;
 }
 
+static bool sendRecverBufferInfo(TakyonPath *path, int nbufs_recver) {
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
+  PathBuffers *buffers = (PathBuffers *)private_path->private_data;
+  for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
+    uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
+    if (recver_bytes > 0) {
+      bool is_cuda_addr = false;
+      bool timed_out;
+      bool ok;
+#ifdef WITH_CUDA
+      is_cuda_addr = buffers->recv_buffer_list[buf_index].recver_is_cuda_addr;
+      ok = socketSend(buffers->socket_fd, &is_cuda_addr, sizeof(bool), false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+      if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send recver is_cuda_addr for buffer %d\n", buf_index); return false; }
+      if (is_cuda_addr) {
+        // Send over address handle
+        size_t addr = buffers->recv_buffer_list[buf_index].local_recver_addr;
+        cudaIpcMemHandle_t ipc_map;
+        ok = cudaCreateIpcMapFromLocalAddr((void *)addr, &ipc_map, path->attrs.error_message);
+        if (!ok) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to map the CUDA recver memory for buffer %d\n", buf_index); return false; }
+        ok = socketSend(buffers->socket_fd, &ipc_map, sizeof(cudaIpcMemHandle_t), false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send recver CUDA memory map info for buffer %d\n", buf_index); return false; }
+        // Send over event handle (needed even for CPU addresses)
+        cudaEvent_t *recver_cuda_event = &buffers->recv_buffer_list[buf_index].recver_cuda_event;
+        cudaIpcEventHandle_t event_ipc_map;
+        ok = cudaCreateIpcMapFromLocalEvent(recver_cuda_event, &event_ipc_map, path->attrs.error_message);
+        if (!ok) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to map the CUDA event for buffer %d\n", buf_index); return false; }
+        ok = socketSend(buffers->socket_fd, &event_ipc_map, sizeof(cudaIpcEventHandle_t), false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send recver CUDA event map info for buffer %d\n", buf_index); return false; }
+      }
+#endif
+      if (!is_cuda_addr) {
+        char *name = buffers->recv_buffer_list[buf_index].local_recver_mmap_name;
+        ok = socketSend(buffers->socket_fd, name, MAX_MMAP_NAME_CHARS, false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send recver mmap name for buffer %d\n", buf_index); return false; }
+      }
+    }
+  }
+  return true;
+}
+
+static bool recvRecverBufferInfo(TakyonPath *path, int nbufs_sender) {
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
+  PathBuffers *buffers = (PathBuffers *)private_path->private_data;
+  for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
+    buffers->send_buffer_list[buf_index].remote_recver_addr = 0;
+    uint64_t remote_recver_bytes = buffers->send_buffer_list[buf_index].remote_max_recver_bytes;
+    if (remote_recver_bytes > 0) {
+      bool is_cuda_addr = false;
+      bool timed_out;
+      bool ok;
+#ifdef WITH_CUDA
+      ok = socketRecv(buffers->socket_fd, &is_cuda_addr, sizeof(bool), false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+      if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv recver is_cuda_addr for buffer %d\n", buf_index); return false; }
+      buffers->send_buffer_list[buf_index].remote_recver_is_cuda = is_cuda_addr;
+      if (is_cuda_addr) {
+        // Wait to recv the CUDA memory map handle
+        cudaIpcMemHandle_t remote_ipc_map;
+        ok = socketRecv(buffers->socket_fd, &remote_ipc_map, sizeof(cudaIpcMemHandle_t), false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv recver CUDA memory map info for buffer %d\n", buf_index); return false; }
+        void *remote_cuda_addr = cudaGetRemoteAddrFromIpcMap(remote_ipc_map, path->attrs.error_message);
+        if (!ok) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get the remote CUDA recver memory for buffer %d\n", buf_index); return false; }
+        buffers->send_buffer_list[buf_index].remote_recver_addr = (size_t)remote_cuda_addr;
+        // Wait to recv the CUDA event map handle (even for CPU addresses)
+        cudaIpcEventHandle_t remote_event_ipc_map;
+        ok = socketRecv(buffers->socket_fd, &remote_event_ipc_map, sizeof(cudaIpcEventHandle_t), false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv recver CUDA event map info for buffer %d\n", buf_index); return false; }
+        ok = cudaGetRemoteEventFromIpcMap(remote_event_ipc_map, &buffers->send_buffer_list[buf_index].remote_recver_cuda_event, path->attrs.error_message);
+        if (!ok) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get the remote CUDA recver event for buffer %d\n", buf_index); return false; }
+        // Verbosity
+        if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
+          printf("%-15s (%s:%s) Got remote CUDA addr and event for recv buffer %d\n", __FUNCTION__, path->attrs.is_endpointA ? "A" : "B", path->attrs.interconnect, buf_index);
+        }
+      }
+#endif
+      if (!is_cuda_addr) {
+        char remote_mmap_name[MAX_MMAP_NAME_CHARS];
+        ok = socketRecv(buffers->socket_fd, remote_mmap_name, MAX_MMAP_NAME_CHARS, false, private_path->path_create_timeout_ns, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv recver mmap name for buffer %d\n", buf_index); return false; }
+        // Verbosity
+        if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
+          printf("%-15s (%s:%s) Getting remote MMAP '%s' addr to recv buffer %d\n", __FUNCTION__, path->attrs.is_endpointA ? "A" : "B", path->attrs.interconnect, remote_mmap_name, buf_index);
+        }
+        void *remote_addr = NULL;
+        ok = mmapGetTimed(remote_mmap_name, remote_recver_bytes, &remote_addr, &buffers->send_buffer_list[buf_index].remote_mmap_handle, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
+        if (!ok || timed_out) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get handle to remote shared app memory: %s\n", remote_mmap_name); return false; }
+        buffers->send_buffer_list[buf_index].remote_recver_addr = (size_t)remote_addr;
+      }
+    }
+  }
+  return true;
+}
+
 GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
+  // Supported formats:
+  //   "InterProcessPointer -ID=<ID> [-recverAddrMmapNamePrefix=<name>]"
+  // WITH_CUDA extras:
+  //   [-destCudaDeviceId=<id>]   If Takyon allocates the destination buffers, then use cudaMalloc() on CUDA device <id>. If not specified, a CPU allocation is done if not pre-allocated.
+
   // Verify the number of buffers
   if (path->attrs.nbufs_AtoB <= 0) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
@@ -328,8 +505,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     return false;
   }
 
-  // Supported formats:
-  //   "InterProcessPointer -ID <ID> [-appAllocedRecvMmap] [-remoteMmapPrefix <name>]"
+  // Get the path ID
   uint32_t path_id;
   bool found;
   bool ok = argGetUInt(path->attrs.interconnect, "-ID=", &path_id, &found, path->attrs.error_message);
@@ -337,18 +513,19 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect text missing -ID=<value>\n");
     return false;
   }
-  // Check if the application will be providing the mmap memory for the remote side
-  bool app_alloced_recv_mmap = argGetFlag(path->attrs.interconnect, "-appAllocedRecvMmap");
-  bool has_remote_mmap_prefix = false;
-  char remote_mmap_prefix[MAX_MMAP_NAME_CHARS];
-  ok = argGetText(path->attrs.interconnect, "-remoteMmapPrefix=", remote_mmap_prefix, MAX_MMAP_NAME_CHARS, &has_remote_mmap_prefix, path->attrs.error_message);
-  if (!ok) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to find interconnect flag -remoteMmapPrefix=<name>\n");
-    return false;
-  }
-  // Create local socket name used to coordinate connection and disconnection
+
+  // Create local socket name used to coordinate connection, synchronization and disconnection
   char socket_name[TAKYON_MAX_INTERCONNECT_CHARS];
   snprintf(socket_name, TAKYON_MAX_INTERCONNECT_CHARS, "%s_sock_%d", MMAP_NAME_PREFIX, path_id);
+
+  // Check if the application will be providing the mmap memory for the remote side
+  bool has_remote_mmap_prefix = false;
+  char remote_mmap_prefix[TAKYON_MAX_INTERCONNECT_CHARS];
+  ok = argGetText(path->attrs.interconnect, "-recverAddrMmapNamePrefix=", remote_mmap_prefix, TAKYON_MAX_INTERCONNECT_CHARS, &has_remote_mmap_prefix, path->attrs.error_message);
+  if (!ok) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Invalid interconnect flag format: expecting -recverAddrMmapNamePrefix=<name>\n");
+    return false;
+  }
 
   // Vebosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
@@ -359,22 +536,21 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
            path_id);
   }
 
-  // Verify dest addresses are all Takyon managed. This is because mmap can't map already created memory.
-  int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  if (!app_alloced_recv_mmap) {
-    for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
-      if (path->attrs.recver_addr_list[buf_index] != 0) {
-        TAKYON_RECORD_ERROR(path->attrs.error_message, "All addresses in path->attrs.recver_addr_list must be NULL and will be allocated by Takyon, unless the flag '-appAllocedRecvMmap' is set which means the app allocated the receive side memory map addresses for each buffer.\n");
-        return false;
-      }
-    }
+  // Get the cuda devices IDs for memory allocation
+#ifdef WITH_CUDA
+  int dest_cuda_device_id = -1;
+  ok = argGetInt(path->attrs.interconnect, "-destCudaDeviceId=", &dest_cuda_device_id, &found, path->attrs.error_message);
+  if (!ok || (found && dest_cuda_device_id<0)) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "The optional argument '-destCudaDeviceId=' was specified. It must be an integer >= 0 but was set to %d\n", dest_cuda_device_id);
+    return false;
   }
+#endif
 
-  // Verify src addresses are all Takyon managed, only if -share is active.
+  // Verify src addresses are all NULL since they wont be used
   int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
   for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
     if (path->attrs.sender_addr_list[buf_index] != 0) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "All addresses in path->attrs.sender_addr_list must be NULL since both the src and dest will use the same memory\n");
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "All addresses in path->attrs.sender_addr_list must be NULL since both the src and dest will use the same memory buffer pointers\n");
       return false;
     }
   }
@@ -389,6 +565,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   private_path->private_data = buffers;
 
   // Allocate the buffers
+  int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
   buffers->send_buffer_list = calloc(nbufs_sender, sizeof(SingleBuffer));
   if (buffers->send_buffer_list == NULL) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
@@ -400,36 +577,41 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     goto cleanup;
   }
 
-  // Fill in some initial fields
-  for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
-    // Sender (can optionally be set by application)
-    uint64_t sender_bytes = path->attrs.sender_max_bytes_list[buf_index];
-    if (sender_bytes > 0) {
-      size_t sender_addr = path->attrs.sender_addr_list[buf_index];
-      if (sender_addr == 0) {
-        buffers->send_buffer_list[buf_index].sender_addr_alloced = true;
-      } else {
-        buffers->send_buffer_list[buf_index].sender_addr = sender_addr;
-      }
-    }
-  }
+  // Fill in some initial sender fields
+  // IMPORTANT: nothing to fill in yet with the send buffers since they are all NULL
+
+  // Fill in some initial recver fields
   for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
-    // Recver (this should not be set by application, unless the app specifically set the flag -appAllocedRecvMmap)
-    if (app_alloced_recv_mmap) {
-      uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
-      if (recver_bytes > 0) {
-        size_t recver_addr = path->attrs.recver_addr_list[buf_index];
-        if (recver_addr == 0) {
-          TAKYON_RECORD_ERROR(path->attrs.error_message, "attrs.recver_addr_list[%d]=0, but the flag '-appAllocedRecvMmap' has been set which means the application must allocate all the buffers with memory mapped addresses.\n", buf_index);
+    // Recver
+    uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
+    if (recver_bytes > 0) {
+      size_t recver_addr = path->attrs.recver_addr_list[buf_index];
+      if (recver_addr == 0) {
+        buffers->recv_buffer_list[buf_index].recver_addr_alloced = true;
+      } else {
+        buffers->recv_buffer_list[buf_index].local_recver_addr = recver_addr;
+        bool is_cpu_mem = true;
+#ifdef WITH_CUDA
+        bool is_cuda_addr;
+        if (!isCudaAddress((void *)recver_addr, &is_cuda_addr, path->attrs.error_message)) {
+          TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to determine if app allocated addr, at attrs.recver_addr_list[%d], is CUDA or CPU memory.\n", buf_index);
           goto cleanup;
-        } else {
-          buffers->recv_buffer_list[buf_index].local_recver_addr = recver_addr;
         }
+        buffers->recv_buffer_list[buf_index].recver_is_cuda_addr = is_cuda_addr;
+        is_cpu_mem = !is_cuda_addr;
+#endif
+        if (is_cpu_mem && !has_remote_mmap_prefix) {
+          TAKYON_RECORD_ERROR(path->attrs.error_message, "attrs.recver_addr_list[%d] supplies an application defined address, but the flag '-recverAddrMmapNamePrefix=<name>' has not been set. This needs to be set so the remote endpoint knows the name of the memory map.\n", buf_index);
+          goto cleanup;
+        }
+        // Record the app allocated mmap name
+        snprintf(buffers->recv_buffer_list[buf_index].local_recver_mmap_name, MAX_MMAP_NAME_CHARS, "%s%d", remote_mmap_prefix, buf_index);
       }
-    } else {
-      buffers->recv_buffer_list[buf_index].recver_addr_alloced = true;
     }
   }
+
+  // Create local sender memory
+  // IMPORTANT: not needed since only dest buffers exists
 
   // Create local socket to synchronize the creation
   if (path->attrs.is_endpointA) {
@@ -461,31 +643,47 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Make sure each sender knows the remote recver buffer sizes
-  // Sender and recevier must have same size since they are shared
-  for (int i=0; i<path->attrs.nbufs_AtoB; i++) {
-    uint64_t max_bytes = path->attrs.is_endpointA ? path->attrs.sender_max_bytes_list[i] : path->attrs.recver_max_bytes_list[i];
-    if (!socketSwapAndVerifyUInt64(buffers->socket_fd, max_bytes, private_path->path_create_timeout_ns, path->attrs.error_message)) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message,
-                          "Both endpoints, sharing A to B buffer, are using a different values for sender_max_bytes_list[%d]=%lld and recver_max_bytes_list[%d]\n",
-                          i, (unsigned long long)max_bytes, i);
-      goto cleanup;
+  if (path->attrs.is_endpointA) {
+    // Step 1: Endpoint A: send recver sizes to B
+    for (int i=0; i<path->attrs.nbufs_BtoA; i++) {
+      if (!socketSendUInt64(buffers->socket_fd, path->attrs.recver_max_bytes_list[i], private_path->path_create_timeout_ns, path->attrs.error_message)) {
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send recver buffer[%d] size\n", i);
+        goto cleanup;
+      }
     }
-    // This is shared memory so the local sender and remote receiver are the same
-    if (path->attrs.is_endpointA) buffers->send_buffer_list[i].remote_max_recver_bytes = path->attrs.sender_max_bytes_list[i];
+    // Step 4: Endpoint A: recv recver sizes from B
+    for (int i=0; i<path->attrs.nbufs_AtoB; i++) {
+      if (!socketRecvUInt64(buffers->socket_fd, &buffers->send_buffer_list[i].remote_max_recver_bytes, private_path->path_create_timeout_ns, path->attrs.error_message)) {
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv recver buffer[%d] size\n", i);
+        goto cleanup;
+      }
+    }
+  } else {
+    // Step 2: Endpoint B: recv recver sizes from A
+    for (int i=0; i<path->attrs.nbufs_BtoA; i++) {
+      if (!socketRecvUInt64(buffers->socket_fd, &buffers->send_buffer_list[i].remote_max_recver_bytes, private_path->path_create_timeout_ns, path->attrs.error_message)) {
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv recver buffer[%d] size\n", i);
+        goto cleanup;
+      }
+    }
+    // Step 3: Endpoint B: send recver sizes to A
+    for (int i=0; i<path->attrs.nbufs_AtoB; i++) {
+      if (!socketSendUInt64(buffers->socket_fd, path->attrs.recver_max_bytes_list[i], private_path->path_create_timeout_ns, path->attrs.error_message)) {
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send recver buffer[%d] size\n", i);
+        goto cleanup;
+      }
+    }
   }
-  for (int i=0; i<path->attrs.nbufs_BtoA; i++) {
-    uint64_t max_bytes = path->attrs.is_endpointA ? path->attrs.recver_max_bytes_list[i] : path->attrs.sender_max_bytes_list[i];
-    if (!socketSwapAndVerifyUInt64(buffers->socket_fd, max_bytes, private_path->path_create_timeout_ns, path->attrs.error_message)) {
-      TAKYON_RECORD_ERROR(path->attrs.error_message,
-                          "Both endpoints, sharing B to A buffer, are using a different values for recver_max_bytes_list[%d]=%lld and sender_max_bytes_list[%d]\n",
-                          i, (unsigned long long)max_bytes, i);
+
+  // This is shared memory so verify the local sender and remote receiver are the same size
+  for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
+    if (buffers->send_buffer_list[buf_index].remote_max_recver_bytes != path->attrs.sender_max_bytes_list[buf_index]) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Endpoints, sharing a single buffer, are using a different values for sender_max_bytes_list[%d]=%ju and remote recver_max_bytes_list[%d]=ju\n",
+                          buf_index, path->attrs.sender_max_bytes_list[buf_index], buf_index, buffers->send_buffer_list[buf_index].remote_max_recver_bytes);
       goto cleanup;
     }
-    // This is shared memory so the local sender and remote receiver are the same
-    if (!path->attrs.is_endpointA) buffers->send_buffer_list[i].remote_max_recver_bytes = path->attrs.sender_max_bytes_list[i];
   }
   
-  // Create local recver memory (this is a posix memory map)
   // Vebosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
     printf("%s (%s:%s) Create shared destination resources\n",
@@ -493,28 +691,48 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
            path->attrs.is_endpointA ? "A" : "B",
            path->attrs.interconnect);
   }
+
+  // Create local recver memory (this is a posix memory map)
   for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
-    // Application memory
-    if (app_alloced_recv_mmap) {
-      // Passed in by the application
-      size_t recver_addr = path->attrs.recver_addr_list[buf_index];
-      buffers->recv_buffer_list[buf_index].local_recver_addr = recver_addr;
-    } else {
+    uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
+    if (recver_bytes > 0 && path->attrs.recver_addr_list[buf_index] == 0) {
       // Takyon needs to allocate
-      uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
       void *addr = NULL;
-      if (recver_bytes > 0) {
+      bool alloc_mmap = true;
+#ifdef WITH_CUDA
+      buffers->recv_buffer_list[buf_index].recver_is_cuda_addr = (dest_cuda_device_id >= 0);
+      if (buffers->recv_buffer_list[buf_index].recver_is_cuda_addr) {
+        alloc_mmap = false;
+        addr = cudaMemoryAlloc(dest_cuda_device_id, recver_bytes, path->attrs.error_message);
+        if (addr == NULL) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of GPU memory\n"); goto cleanup; }
+      }
+#endif
+      if (alloc_mmap) {
         char local_mmap_name[MAX_MMAP_NAME_CHARS];
         snprintf(local_mmap_name, MAX_MMAP_NAME_CHARS, "%s_%s_app_%d_%lld_%d", MMAP_NAME_PREFIX, path->attrs.is_endpointA ? "c" : "s", buf_index, (unsigned long long)recver_bytes, path_id);
-        if (!mmapAlloc(local_mmap_name, recver_bytes, &addr, &buffers->recv_buffer_list[buf_index].local_mmap_app, path->attrs.error_message)) {
+        if (!mmapAlloc(local_mmap_name, recver_bytes, &addr, &buffers->recv_buffer_list[buf_index].local_mmap_handle, path->attrs.error_message)) {
           TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create shared app memory: %s\n", local_mmap_name);
           goto cleanup;
         }
+        // Record the mmap name
+        snprintf(buffers->recv_buffer_list[buf_index].local_recver_mmap_name, MAX_MMAP_NAME_CHARS, "%s", local_mmap_name);
       }
       path->attrs.recver_addr_list[buf_index] = (size_t)addr;
       buffers->recv_buffer_list[buf_index].local_recver_addr = (size_t)addr;
     }
   }
+
+#ifdef WITH_CUDA
+  // Create the CUDA event handles for all GPU recv buffers
+  for (int buf_index=0; buf_index<nbufs_recver; buf_index++) {
+    uint64_t recver_bytes = path->attrs.recver_max_bytes_list[buf_index];
+    if (recver_bytes > 0 && buffers->recv_buffer_list[buf_index].recver_is_cuda_addr) {
+      cudaEvent_t *recver_cuda_event = &buffers->recv_buffer_list[buf_index].recver_cuda_event;
+      ok = cudaEventAlloc(dest_cuda_device_id, recver_cuda_event, path->attrs.error_message);
+      if (!ok) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create the CUDA event for buffer %d\n", buf_index); goto cleanup; }
+    }
+  }
+#endif
 
   // Socket round trip, to make sure the remote memory handle is the latest and not stale
   if (!socketBarrier(path->attrs.is_endpointA, buffers->socket_fd, BARRIER_INIT_STEP2, private_path->path_create_timeout_ns, path->attrs.error_message)) {
@@ -522,7 +740,6 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     goto cleanup;
   }
 
-  // Get the remote destination address
   // Vebosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
     printf("%s (%s:%s) Get remote memory addresses\n",
@@ -530,26 +747,24 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
            path->attrs.is_endpointA ? "A" : "B",
            path->attrs.interconnect);
   }
+
+  // Get the information about each remote recv buffer
+  // Make sure each sender knows the remote recver buffer sizes
+  if (path->attrs.is_endpointA) {
+    // Step 1: Endpoint A: send to B
+    if (!sendRecverBufferInfo(path, nbufs_recver)) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send A->B recver buffer info\n"); goto cleanup; }
+    // Step 4: Endpoint A: recv from B
+    if (!recvRecverBufferInfo(path, nbufs_sender)) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv A->B remote recver buffer info\n"); goto cleanup; }
+  } else {
+    // Step 2: Endpoint B: recv from A
+    if (!recvRecverBufferInfo(path, nbufs_sender)) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to recv B->A remote recver buffer info\n"); goto cleanup; }
+    // Step 3: Endpoint B: send to A
+    if (!sendRecverBufferInfo(path, nbufs_recver)) { TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to send B->A recver buffer info\n"); goto cleanup; }
+  }
+
+  // No set the sender address to the same as the remote recver address
   for (int buf_index=0; buf_index<nbufs_sender; buf_index++) {
-    uint64_t remote_recver_bytes = buffers->send_buffer_list[buf_index].remote_max_recver_bytes;
-    char remote_mmap_name[MAX_MMAP_NAME_CHARS];
-    // Application memory
-    if (has_remote_mmap_prefix) {
-      snprintf(remote_mmap_name, MAX_MMAP_NAME_CHARS, "%s%d", remote_mmap_prefix, buf_index);
-    } else {
-      snprintf(remote_mmap_name, MAX_MMAP_NAME_CHARS, "%s_%s_app_%d_%lld_%d", MMAP_NAME_PREFIX, path->attrs.is_endpointA ? "s" : "c", buf_index, (unsigned long long)remote_recver_bytes, path_id);
-    }
-    void *addr = NULL;
-    if (remote_recver_bytes > 0) {
-      bool timed_out;
-      bool success = mmapGetTimed(remote_mmap_name, remote_recver_bytes, &addr, &buffers->send_buffer_list[buf_index].remote_mmap_app, private_path->path_create_timeout_ns, &timed_out, path->attrs.error_message);
-      if ((!success) || timed_out) {
-        TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to get handle to remote shared app memory: %s\n", remote_mmap_name);
-        goto cleanup;
-      }
-    }
-    buffers->send_buffer_list[buf_index].remote_recver_addr = (size_t)addr;
-    // Need the sender addr to be the same as the destination address
+    size_t addr = buffers->send_buffer_list[buf_index].remote_recver_addr;
     path->attrs.sender_addr_list[buf_index] = (size_t)addr;
     buffers->send_buffer_list[buf_index].sender_addr = (size_t)addr;
   }
@@ -583,8 +798,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 
  cleanup:
   // An error ocurred so clean up all allocated resources
-  freePathResources(path);
-  free(buffers);
+  (void)freePathMemoryResources(path);
   return false;
 }
 

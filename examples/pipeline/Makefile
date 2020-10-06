@@ -25,7 +25,7 @@ ifeq ($(UNAME_S),Linux)
     ifeq ($(USE_STATIC_LIB),Yes)
         PRJ_LIBS := -L../../API/builds/linux -lTakyonStatic -lrt -lm
     endif
-    ifeq ($(RDMA),Yes)
+    ifeq ($(WITH_RDMA),Yes)
         PRJ_LIBS += -libverbs -lrdmacm -lm
     endif
 endif
@@ -34,6 +34,12 @@ ifeq ($(UNAME_S),Darwin)
     ifeq ($(USE_STATIC_LIB),Yes)
         PRJ_LIBS := -L../../API/builds/mac -lTakyonStatic
     endif
+endif
+
+# Check for CUDA integration
+ifeq ($(WITH_CUDA),Yes)
+    CFLAGS += -DWITH_CUDA -I/usr/local/cuda/include
+    PRJ_LIBS += -L/usr/local/cuda/lib64 -lcudart -lcuda
 endif
 
 vpath %.c .

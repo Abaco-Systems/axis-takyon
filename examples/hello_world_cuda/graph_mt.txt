@@ -1,0 +1,72 @@
+Groups
+Group: Hello
+  Instances: 2
+
+Processes
+Process: 0
+  GroupIDs: Hello[0] Hello[1]
+
+Buffers
+# ------ A -> B (buffer 0): CPU -> CUDA
+Buffer: buf_A0
+  ProcessId: 0
+  Where: CPU
+  Bytes: 1000
+Buffer: buf_B0
+  ProcessId: 0
+  Where: CUDA:0
+  Bytes: 1000
+# ------ A -> B (buffer 1): CUDA -> CPU
+Buffer: buf_A1
+  ProcessId: 0
+  Where: CUDA:0
+  Bytes: 1000
+Buffer: buf_B1
+  ProcessId: 0
+  Where: CPU
+  Bytes: 1000
+# ------ A -> B (buffer 2): CUDA -> CUDA
+Buffer: buf_A2
+  ProcessId: 0
+  Where: CUDA:0
+  Bytes: 1000
+Buffer: buf_B2
+  ProcessId: 0
+  Where: CUDA:0
+  Bytes: 1000
+# ------ A -> B (buffer 3): CPU -> CPU
+Buffer: buf_A3
+  ProcessId: 0
+  Where: CPU
+  Bytes: 1000
+Buffer: buf_B3
+  ProcessId: 0
+  Where: CPU
+  Bytes: 1000
+# ------ A -> B (buffer 4): depends on if interconnect arguments exist; -srcCudaDeviceId=<id> -destCudaDeviceId=<id>
+
+Paths
+Defaults
+  IsPolling: false, false
+  AbortOnFailure: true, true
+  Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  NBufsAtoB: 5, 5
+  NBufsBtoA: 1, 1
+  SenderMaxBytesList: 1000 1000 1000 1000 1000,    0
+  RecverMaxBytesList:                        0, 1000 1000 1000 1000 1000
+Path: 0
+  Endpoints: Hello[0], Hello[1]
+  InterconnectA: InterThreadMemcpy -ID=1 -srcCudaDeviceId=0
+  InterconnectB: InterThreadMemcpy -ID=1 -destCudaDeviceId=0
+  SenderAddrList: buf_A0:0 buf_A1:0 buf_A2:0 buf_A3:0 NULL, NULL
+  RecverAddrList:                                     NULL, buf_B0:0 buf_B1:0 buf_B2:0 buf_B3:0 NULL
+
+Collectives

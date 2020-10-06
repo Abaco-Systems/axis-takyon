@@ -526,6 +526,11 @@ static void getUInt64List(char *data, int *count_ret, uint64_t **uint64_list_ret
 }
 
 static int getGroupIdFromInstance(TakyonGraph *graph, char *data, int line_count) {
+  // See if the ID is meant to be skipped
+  if (strcmp(data, "-") == 0) {
+    return -1;
+  }
+
   // Format is <group_name>[index]
   static char group_name[MAX_VALUE_BYTES];
   size_t length = strlen(data);
@@ -583,7 +588,7 @@ static void getGroupIDList(TakyonGraph *graph, char *data, int *count_ret, int *
       int group_index;
       int tokens = sscanf(&keyword[open_bracket_index], "[%u]", &group_index);
       if (tokens != 1) {
-        fprintf(stderr, "Line %d: '%s' is not a valid group ID. Must be '<group_name>[index]'\n", line_count, keyword);
+        fprintf(stderr, "Line %d: Can't build group ID list. '%s' is not a valid group ID. Must be '<group_name>[index]'\n", line_count, keyword);
         exit(EXIT_FAILURE);
       }
       TakyonGroup *group_desc = takyonGetGroupByName(graph, group_id_name);
@@ -1094,6 +1099,10 @@ static void updateParam(TakyonGraph *graph, PathParam *param, char *value, int l
     if ((param->intA == -1) && (param->intB == -1)) {
       param->intA = getGroupIdFromInstance(graph, valueA, line_count);
       param->intB = getGroupIdFromInstance(graph, valueB, line_count);
+      if ((param->intA == -1) && (param->intB == -1)) {
+        fprintf(stderr, "Line %d: The path's group IDs must have at least one valid endpoint (Use '-' to indicate an unused endpoint for a one-sided connection).\n", line_count);
+        exit(EXIT_FAILURE);
+      }
     } else {
       fprintf(stderr, "Line %d: The path's group IDs have already been set.\n", line_count);
       exit(EXIT_FAILURE);
@@ -1285,7 +1294,6 @@ static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char 
   setParamDefaultValueAddrList(&default_params[15], "SenderAddrList:", 0);
   setParamDefaultValueAddrList(&default_params[16], "RecverAddrList:", 0);
 
-  /*+ need to handle unconnected paths */
   validateKey("Paths", data_ptr, keyword, line_count);
   data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
   while ((strcmp("Defaults", keyword) == 0) || (strcmp("Path:", keyword) == 0)) {
@@ -1315,13 +1323,14 @@ static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char 
         validateUniqueInt(path_desc->id, graph->path_list[j].id, line_count);
       }
 
-      // Set path attribute defaults
+      // Set path attribute defaults (make sure endpoints are unset)
       PathParam path_params[NUM_PATH_PARAMS];
       memset(path_params, 0, NUM_PATH_PARAMS*sizeof(PathParam));
       copyParams(path_params, default_params, NUM_DEFAULT_PARAMS);
       setParamDefaultValueGroupInstance(&path_params[NUM_DEFAULT_PARAMS], "Endpoints:", -1);
 
-      // Endpoints (each end is a group ID)
+      // Endpoints (each endpoint is a group ID)
+      // NOTE: if one-sided, then one of the group IDs can be "-" (i.e. remain -1)
       data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
       validateKeyValue("Endpoints:", data_ptr, keyword, value, line_count);
       int param_index = getParamIndex(keyword, path_params, NUM_PATH_PARAMS);
@@ -1353,21 +1362,35 @@ static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char 
       }
 
       // Do some error checking before setting the Takyon path attributes
-      if (strlen(interconnectA) == 0) {
-        fprintf(stderr, "Line %d: 'InterconnectA' was not defined for this path\n", line_count-1);
-        exit(EXIT_FAILURE);
-      }
-      if (strlen(interconnectB) == 0) {
-        fprintf(stderr, "Line %d: 'InterconnectB' was not defined for this path\n", line_count-1);
-        exit(EXIT_FAILURE);
-      }
-      if ((path_params[NUM_DEFAULT_PARAMS].intA < 0) || (path_params[NUM_DEFAULT_PARAMS].intB < 0)) {
+      if ((path_params[NUM_DEFAULT_PARAMS].intA < 0) && (path_params[NUM_DEFAULT_PARAMS].intB < 0)) {
         fprintf(stderr, "Line %d: 'Endpoints:' for A and B was not defined for this path\n", line_count-1);
         exit(EXIT_FAILURE);
       }
       if (path_params[NUM_DEFAULT_PARAMS].intA == path_params[NUM_DEFAULT_PARAMS].intB) {
         fprintf(stderr, "Line %d: 'Endpoints:' for A and B can not be the same\n", line_count-1);
         exit(EXIT_FAILURE);
+      }
+      if (path_params[NUM_DEFAULT_PARAMS].intA < 0) {
+        if (strcmp(interconnectA, "-") != 0) {
+          fprintf(stderr, "Line %d: 'InterconnectA' should be defined as '-' since this is a one-sided interconnect, and endpoint B is a valid endpoint\n", line_count-1);
+          exit(EXIT_FAILURE);
+        }
+      } else {
+        if (strlen(interconnectA) == 0) {
+          fprintf(stderr, "Line %d: 'InterconnectA' was not defined for this path\n", line_count-1);
+          exit(EXIT_FAILURE);
+        }
+      }
+      if (path_params[NUM_DEFAULT_PARAMS].intB < 0) {
+        if (strcmp(interconnectB, "-") != 0) {
+          fprintf(stderr, "Line %d: 'InterconnectB' should be defined as '-' since this is a one-sided interconnect, and endpoint A is a valid endpoint\n", line_count-1);
+          exit(EXIT_FAILURE);
+        }
+      } else {
+        if (strlen(interconnectB) == 0) {
+          fprintf(stderr, "Line %d: 'InterconnectB' was not defined for this path\n", line_count-1);
+          exit(EXIT_FAILURE);
+        }
       }
 
       // Validate endpoint A buffer counts
@@ -1467,8 +1490,8 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
     TakyonProcess *process_desc = &graph->process_list[i];
     printf("  Process %d: GroupIDs:", process_desc->id);
     for (int j=0; j<process_desc->thread_count; j++) {
-      TakyonGroup *group_desc = takyonGetGroup(graph, process_desc->thread_list[j].id);
-      int instance = process_desc->thread_list[j].id - group_desc->starting_group_id;
+      TakyonGroup *group_desc = takyonGetGroup(graph, process_desc->thread_list[j].group_id);
+      int instance = process_desc->thread_list[j].group_id - group_desc->starting_group_id;
       printf(" %s[%d]", group_desc->name, instance);
     }
     printf("\n");
@@ -1485,86 +1508,105 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
   printf("Paths = %d\n", graph->path_count);
   for (int i=0; i<graph->path_count; i++) {
     TakyonConnection *path_desc = &graph->path_list[i];
-    TakyonGroup *group_descA = takyonGetGroup(graph, path_desc->group_idA);
-    int instanceA = path_desc->group_idA - group_descA->starting_group_id;
-    TakyonGroup *group_descB = takyonGetGroup(graph, path_desc->group_idB);
-    int instanceB = path_desc->group_idB - group_descB->starting_group_id;
-    printf("  Path=%d: Endpoint-A=%d=%s[%d], Endpoint-B=%d=%s[%d]\n", path_desc->id, path_desc->group_idA, group_descA->name, instanceA, path_desc->group_idB, group_descB->name, instanceB);
+    TakyonGroup *group_descA = NULL;
+    TakyonGroup *group_descB = NULL;
+    int instanceA = -1;
+    int instanceB = -1;
+    if (path_desc->group_idA >= 0) {
+      group_descA = takyonGetGroup(graph, path_desc->group_idA);
+      instanceA = path_desc->group_idA - group_descA->starting_group_id;
+    }
+    if (path_desc->group_idB >= 0) {
+      group_descB = takyonGetGroup(graph, path_desc->group_idB);
+      instanceB = path_desc->group_idB - group_descB->starting_group_id;
+    }
+    if (instanceA >= 0 && instanceB >= 0) {
+      printf("  Path=%d: EndpointA = %s[%d] (global ID is %d), EndpointB = %s[%d] (global ID is %d)\n", path_desc->id,
+             group_descA->name, instanceA, path_desc->group_idA,
+             group_descB->name, instanceB, path_desc->group_idB);
+    } else if (instanceA >= 0) {
+      printf("  Path=%d: EndpointA = %s[%d] (global ID is %d), EndpointB is unused\n", path_desc->id, group_descA->name, instanceA, path_desc->group_idA);
+    } else {
+      printf("  Path=%d: EndpointA is unused, EndpointB = %s[%d] (global ID is %d)\n", path_desc->id, group_descB->name, instanceB, path_desc->group_idB);
+    }
 
     // Endpoint A
-    printf("    Endpoint A Attributes:\n");
-    printf("      Interconnect: %s\n", path_desc->attrsA.interconnect);
-    printf("      is_polling: %s\n", path_desc->attrsA.is_polling ? "Yes" : "No");
-    printf("      abort_on_failure: %s\n", path_desc->attrsA.abort_on_failure ? "Yes" : "No");
-    printf("      verbosity: 0x%llx\n", (unsigned long long)path_desc->attrsA.verbosity);
-    printf("      path_create_timeout: %lf\n", path_desc->attrsA.path_create_timeout);
-    printf("      send_start_timeout: %lf\n", path_desc->attrsA.send_start_timeout);
-    printf("      send_finish_timeout: %lf\n", path_desc->attrsA.send_finish_timeout);
-    printf("      recv_start_timeout: %lf\n", path_desc->attrsA.recv_start_timeout);
-    printf("      recv_finish_timeout: %lf\n", path_desc->attrsA.recv_finish_timeout);
-    printf("      path_destroy_timeout: %lf\n", path_desc->attrsA.path_destroy_timeout);
-    printf("      send_completion_method: %s\n", (path_desc->attrsA.send_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
-    printf("      recv_completion_method: %s\n", (path_desc->attrsA.recv_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
-    printf("      nbufs_AtoB: %d\n", path_desc->attrsA.nbufs_AtoB);
-    printf("      nbufs_BtoA: %d\n", path_desc->attrsA.nbufs_BtoA);
-    printf("      sender_max_bytes_list:");
-    for (int j=0; j<path_desc->attrsA.nbufs_AtoB; j++) {
-      printf(" %llu", (unsigned long long)path_desc->attrsA.sender_max_bytes_list[j]);
+    if (instanceA >= 0) {
+      printf("    Endpoint A Attributes:\n");
+      printf("      Interconnect: %s\n", path_desc->attrsA.interconnect);
+      printf("      is_polling: %s\n", path_desc->attrsA.is_polling ? "Yes" : "No");
+      printf("      abort_on_failure: %s\n", path_desc->attrsA.abort_on_failure ? "Yes" : "No");
+      printf("      verbosity: 0x%llx\n", (unsigned long long)path_desc->attrsA.verbosity);
+      printf("      path_create_timeout: %lf\n", path_desc->attrsA.path_create_timeout);
+      printf("      send_start_timeout: %lf\n", path_desc->attrsA.send_start_timeout);
+      printf("      send_finish_timeout: %lf\n", path_desc->attrsA.send_finish_timeout);
+      printf("      recv_start_timeout: %lf\n", path_desc->attrsA.recv_start_timeout);
+      printf("      recv_finish_timeout: %lf\n", path_desc->attrsA.recv_finish_timeout);
+      printf("      path_destroy_timeout: %lf\n", path_desc->attrsA.path_destroy_timeout);
+      printf("      send_completion_method: %s\n", (path_desc->attrsA.send_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
+      printf("      recv_completion_method: %s\n", (path_desc->attrsA.recv_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
+      printf("      nbufs_AtoB: %d\n", path_desc->attrsA.nbufs_AtoB);
+      printf("      nbufs_BtoA: %d\n", path_desc->attrsA.nbufs_BtoA);
+      printf("      sender_max_bytes_list:");
+      for (int j=0; j<path_desc->attrsA.nbufs_AtoB; j++) {
+        printf(" %llu", (unsigned long long)path_desc->attrsA.sender_max_bytes_list[j]);
+      }
+      printf("\n");
+      printf("      recver_max_bytes_list:");
+      for (int j=0; j<path_desc->attrsA.nbufs_BtoA; j++) {
+        printf(" %llu", (unsigned long long)path_desc->attrsA.recver_max_bytes_list[j]);
+      }
+      printf("\n");
+      printf("      sender_addr_list:");
+      for (int j=0; j<path_desc->attrsA.nbufs_AtoB; j++) {
+        printf(" 0x%llx", (unsigned long long)path_desc->attrsA.sender_addr_list[j]);
+      }
+      printf("\n");
+      printf("      recver_addr_list:");
+      for (int j=0; j<path_desc->attrsA.nbufs_BtoA; j++) {
+        printf(" 0x%llx", (unsigned long long)path_desc->attrsA.recver_addr_list[j]);
+      }
+      printf("\n");
     }
-    printf("\n");
-    printf("      recver_max_bytes_list:");
-    for (int j=0; j<path_desc->attrsA.nbufs_BtoA; j++) {
-      printf(" %llu", (unsigned long long)path_desc->attrsA.recver_max_bytes_list[j]);
-    }
-    printf("\n");
-    printf("      sender_addr_list:");
-    for (int j=0; j<path_desc->attrsA.nbufs_AtoB; j++) {
-      printf(" 0x%llx", (unsigned long long)path_desc->attrsA.sender_addr_list[j]);
-    }
-    printf("\n");
-    printf("      recver_addr_list:");
-    for (int j=0; j<path_desc->attrsA.nbufs_BtoA; j++) {
-      printf(" 0x%llx", (unsigned long long)path_desc->attrsA.recver_addr_list[j]);
-    }
-    printf("\n");
 
     // Endpoint B
-    printf("    Endpoint B Attributes:\n");
-    printf("      Interconnect: %s\n", path_desc->attrsB.interconnect);
-    printf("      is_polling: %s\n", path_desc->attrsB.is_polling ? "Yes" : "No");
-    printf("      abort_on_failure: %s\n", path_desc->attrsB.abort_on_failure ? "Yes" : "No");
-    printf("      verbosity: 0x%llx\n", (unsigned long long)path_desc->attrsB.verbosity);
-    printf("      path_create_timeout: %lf\n", path_desc->attrsB.path_create_timeout);
-    printf("      send_start_timeout: %lf\n", path_desc->attrsB.send_start_timeout);
-    printf("      send_finish_timeout: %lf\n", path_desc->attrsB.send_finish_timeout);
-    printf("      recv_start_timeout: %lf\n", path_desc->attrsB.recv_start_timeout);
-    printf("      recv_finish_timeout: %lf\n", path_desc->attrsB.recv_finish_timeout);
-    printf("      path_destroy_timeout: %lf\n", path_desc->attrsB.path_destroy_timeout);
-    printf("      send_completion_method: %s\n", (path_desc->attrsB.send_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
-    printf("      recv_completion_method: %s\n", (path_desc->attrsB.recv_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
-    printf("      nbufs_AtoB: %d\n", path_desc->attrsB.nbufs_AtoB);
-    printf("      nbufs_BtoA: %d\n", path_desc->attrsB.nbufs_BtoA);
-    printf("      sender_max_bytes_list:");
-    for (int j=0; j<path_desc->attrsB.nbufs_AtoB; j++) {
-      printf(" %llu", (unsigned long long)path_desc->attrsB.sender_max_bytes_list[j]);
+    if (instanceB >= 0) {
+      printf("    Endpoint B Attributes:\n");
+      printf("      Interconnect: %s\n", path_desc->attrsB.interconnect);
+      printf("      is_polling: %s\n", path_desc->attrsB.is_polling ? "Yes" : "No");
+      printf("      abort_on_failure: %s\n", path_desc->attrsB.abort_on_failure ? "Yes" : "No");
+      printf("      verbosity: 0x%llx\n", (unsigned long long)path_desc->attrsB.verbosity);
+      printf("      path_create_timeout: %lf\n", path_desc->attrsB.path_create_timeout);
+      printf("      send_start_timeout: %lf\n", path_desc->attrsB.send_start_timeout);
+      printf("      send_finish_timeout: %lf\n", path_desc->attrsB.send_finish_timeout);
+      printf("      recv_start_timeout: %lf\n", path_desc->attrsB.recv_start_timeout);
+      printf("      recv_finish_timeout: %lf\n", path_desc->attrsB.recv_finish_timeout);
+      printf("      path_destroy_timeout: %lf\n", path_desc->attrsB.path_destroy_timeout);
+      printf("      send_completion_method: %s\n", (path_desc->attrsB.send_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
+      printf("      recv_completion_method: %s\n", (path_desc->attrsB.recv_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
+      printf("      nbufs_AtoB: %d\n", path_desc->attrsB.nbufs_AtoB);
+      printf("      nbufs_BtoA: %d\n", path_desc->attrsB.nbufs_BtoA);
+      printf("      sender_max_bytes_list:");
+      for (int j=0; j<path_desc->attrsB.nbufs_AtoB; j++) {
+        printf(" %llu", (unsigned long long)path_desc->attrsB.sender_max_bytes_list[j]);
+      }
+      printf("\n");
+      printf("      recver_max_bytes_list:");
+      for (int j=0; j<path_desc->attrsB.nbufs_BtoA; j++) {
+        printf(" %llu", (unsigned long long)path_desc->attrsB.recver_max_bytes_list[j]);
+      }
+      printf("\n");
+      printf("      sender_addr_list:");
+      for (int j=0; j<path_desc->attrsB.nbufs_AtoB; j++) {
+        printf(" %llu", (unsigned long long)path_desc->attrsB.sender_addr_list[j]);
+      }
+      printf("\n");
+      printf("      recver_addr_list:");
+      for (int j=0; j<path_desc->attrsB.nbufs_BtoA; j++) {
+        printf(" %llu", (unsigned long long)path_desc->attrsB.recver_addr_list[j]);
+      }
+      printf("\n");
     }
-    printf("\n");
-    printf("      recver_max_bytes_list:");
-    for (int j=0; j<path_desc->attrsB.nbufs_BtoA; j++) {
-      printf(" %llu", (unsigned long long)path_desc->attrsB.recver_max_bytes_list[j]);
-    }
-    printf("\n");
-    printf("      sender_addr_list:");
-    for (int j=0; j<path_desc->attrsB.nbufs_AtoB; j++) {
-      printf(" %llu", (unsigned long long)path_desc->attrsB.sender_addr_list[j]);
-    }
-    printf("\n");
-    printf("      recver_addr_list:");
-    for (int j=0; j<path_desc->attrsB.nbufs_BtoA; j++) {
-      printf(" %llu", (unsigned long long)path_desc->attrsB.recver_addr_list[j]);
-    }
-    printf("\n");
-
   }
 #endif
 
@@ -1987,14 +2029,37 @@ void takyonPrintGraph(TakyonGraph *graph) {
   printf("  Paths:\n");
   for (int i=0; i<graph->path_count; i++) {
     TakyonConnection *path_desc = &graph->path_list[i];
-    TakyonGroup *group_descA = takyonGetGroup(graph, path_desc->group_idA);
-    int instanceA = path_desc->group_idA - group_descA->starting_group_id;
-    TakyonGroup *group_descB = takyonGetGroup(graph, path_desc->group_idB);
-    int instanceB = path_desc->group_idB - group_descB->starting_group_id;
-    printf("    Path %d: %s[%d] <--> %s[%d]\n", path_desc->id, group_descA->name, instanceA, group_descB->name, instanceB);
+    TakyonGroup *group_descA = NULL;
+    TakyonGroup *group_descB = NULL;
+    int instanceA = -1;
+    int instanceB = -1;
+    if (path_desc->group_idA >= 0) {
+      group_descA = takyonGetGroup(graph, path_desc->group_idA);
+      instanceA = path_desc->group_idA - group_descA->starting_group_id;
+    }
+    if (path_desc->group_idB >= 0) {
+      group_descB = takyonGetGroup(graph, path_desc->group_idB);
+      instanceB = path_desc->group_idB - group_descB->starting_group_id;
+    }
+    if (instanceA >= 0 && instanceB >= 0) {
+      printf("    Path %d: %s[%d] <--> %s[%d]\n", path_desc->id, group_descA->name, instanceA, group_descB->name, instanceB);
+      printf("      Interconnect A: %s\n", path_desc->attrsA.interconnect);
+      printf("      Interconnect B: %s\n", path_desc->attrsB.interconnect);
+    } else if (instanceA >= 0) {
+      printf("    Path %d: Endpoint A = %s[%d], Endpoint B unused\n", path_desc->id, group_descA->name, instanceA);
+      printf("      Interconnect A: %s\n", path_desc->attrsA.interconnect);
+      printf("      Interconnect B: -\n");
+    } else {
+      printf("    Path %d: Endpoint A unused, Endpoint B = %s[%d]\n", path_desc->id, group_descB->name, instanceB);
+      printf("      Interconnect A: -\n");
+      printf("      Interconnect B: %s\n", path_desc->attrsB.interconnect);
+    }
   }
 
   printf("  Collectives:\n");
+  if (graph->collective_count == 0) {
+    printf("    -\n");
+  }
   for (int i=0; i<graph->collective_count; i++) {
     TakyonCollective *collective_desc = &graph->collective_list[i];
     printf("    '%s', Type=%s, Paths:", collective_desc->name, collectiveTypeToName(collective_desc->type));

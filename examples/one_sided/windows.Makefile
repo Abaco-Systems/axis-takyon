@@ -12,13 +12,30 @@
 
 TARGET       = one_sided.exe
 C_OBJS       = one_sided.obj takyon_time.obj takyon_attributes.obj
+
+# Check for CUDA integration
+!IF "$(WITH_CUDA)" == "Yes"
+!  IF "$(CUDA_HOME)" == ""
+!    ERROR 'CUDA_HOME environment variable not defined!'
+!  ENDIF
+CUDA_CFLAGS = -DWITH_CUDA -I"$(CUDA_HOME)\include"
+CUDA_LIB = "$(CUDA_HOME)\lib\x64\cudart.lib"
+!  MESSAGE Enabling CUDA integration:
+!  MESSAGE CUDA_CFLAGS = $(CUDA_CFLAGS)
+!  MESSAGE CUDA_LIB = $(CUDA_LIB)
+!  MESSAGE
+!ELSE
+CUDA_CFLAGS =
+CUDA_LIB =
+!ENDIF
+
 #PTHREADS_INCLUDE = -I../../API/inc/windows
 PTHREADS_INCLUDE = -Ic:/pthreads4w/install/include
-CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc $(PTHREADS_INCLUDE) -I../../extensions
+CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARNINGS=1 -I../../API/inc $(CUDA_CFLAGS) $(PTHREADS_INCLUDE) -I../../extensions
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
 PTHREADS_LIB = c:/pthreads4w/install/lib/libpthreadVC3.lib /NODEFAULTLIB:LIBCMT.LIB
 #PTHREADS_LIB = c:/pthreads4w/install/lib/libpthreadVC3d.lib /NODEFAULTLIB:LIBCMT.LIB
-LIBS         = ../../API/builds/windows/TakyonStatic.lib Ws2_32.lib $(PTHREADS_LIB)
+LIBS         = ../../API/builds/windows/TakyonStatic.lib Ws2_32.lib $(CUDA_LIB) $(PTHREADS_LIB)
 
 .SUFFIXES: .c
 

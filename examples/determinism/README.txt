@@ -55,7 +55,7 @@ Run:
       Terminal 2: > ./determinism "InterProcessSocket -ID=1" -poll
 
       Terminal 1: > ./determinism "Socket -client -IP=127.0.0.1 -port=12345" -endpointA
-      Terminal 2: > ./determinism "Socket -server -IP=127.0.0.1 -port=12345"
+      Terminal 2: > ./determinism "Socket -server -IP=127.0.0.1 -port=12345 -reuse"
 
       Terminal 1: > ./determinism "Socket -client -IP=127.0.0.1 -ID=1" -endpointA -poll
       Terminal 2: > ./determinism "Socket -server -IP=Any -ID=1" -poll

@@ -163,10 +163,9 @@ extern double takyonTime();
 
 // Endian
 extern bool takyonEndianIsBig();
-/*+ rename to takyonEndianSwap16Byte */
-extern void takyonEndianSwapUInt16(uint16_t *data, uint64_t num_elements);
-extern void takyonEndianSwapUInt32(uint32_t *data, uint64_t num_elements);
-extern void takyonEndianSwapUInt64(uint64_t *data, uint64_t num_elements);
+extern void takyonEndianSwap2Byte(void *data, uint64_t num_elements);
+extern void takyonEndianSwap4Byte(void *data, uint64_t num_elements);
+extern void takyonEndianSwap8Byte(void *data, uint64_t num_elements);
 
 // Setting path attributes
 extern TakyonPathAttributes takyonAllocAttributes(bool is_endpointA, bool is_polling, int nbufs_AtoB, int nbufs_BtoA, uint64_t bytes, double timeout, const char *interconnect);

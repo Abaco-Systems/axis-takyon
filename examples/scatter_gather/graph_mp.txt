@@ -53,8 +53,8 @@ Defaults
   RecverAddrList: NULL NULL, NULL NULL
 Path: 0
   Endpoints: parent[0], child[0]
-  InterconnectA: InterProcessMemcpy -ID=1 -appAllocedRecvMmap
-  InterconnectB: InterProcessMemcpy -ID=1 -remoteMmapPrefix=gatherDest
+  InterconnectA: InterProcessMemcpy -ID=1 -recverAddrMmapNamePrefix=gatherDest
+  InterconnectB: InterProcessMemcpy -ID=1
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 1
@@ -65,8 +65,8 @@ Path: 1
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 2
   Endpoints: parent[0], child[2]
-  InterconnectA: InterProcessMemcpy -ID=3 -appAllocedRecvMmap
-  InterconnectB: InterProcessMemcpy -ID=3 -remoteMmapPrefix=gatherDest
+  InterconnectA: InterProcessMemcpy -ID=3 -recverAddrMmapNamePrefix=gatherDest
+  InterconnectB: InterProcessMemcpy -ID=3
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 3

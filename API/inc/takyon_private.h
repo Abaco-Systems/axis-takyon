@@ -17,6 +17,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#ifdef WITH_CUDA
+  #include <cuda_runtime.h>
+#endif
 
 typedef struct {
   // Convenience: timeouts converted to nanoseconds (since many interfaces use this instead of double)
@@ -46,6 +49,7 @@ typedef struct {
 #define MAX_INTERCONNECT_MODULES 20                 // The number of unique interconnect modules that can be dynamically loaded at once (increase as needed)
 #define MAX_MMAP_NAME_CHARS 31                      // This small value of 31 is imposed by Apple's OSX
 #define MAX_ERROR_MESSAGE_CHARS 10000               // This will hold the error stack message. Try to be terse!
+#define MICROSECONDS_TO_SLEEP_BEFORE_DISCONNECTING 10000 // 10 Milliseconds
 
 #ifdef BUILD_STATIC_LIB
 #define GLOBAL_VISIBILITY static
@@ -72,7 +76,6 @@ typedef struct { // This is used to allow threads in the same process to share a
   bool connected;
   bool disconnected;
   bool connection_broken;
-  bool memory_buffers_syned;
   int usage_count;
 } InterThreadManagerItem;
 
@@ -108,12 +111,31 @@ extern bool sharedLibraryUnload(const char *interconnect_module, char *error_mes
 extern int memoryPageSize();
 extern bool memoryAlloc(size_t alignment, size_t size, void **addr_ret, char *error_message);
 extern bool memoryFree(void *addr, char *error_message);
+#ifdef WITH_CUDA
+extern void *cudaMemoryAlloc(int cuda_device_id, uint64_t bytes, char *error_message);
+extern bool cudaMemoryFree(void *addr, char *error_message);
+#endif
 
 // Memory mapped allocation (can be shared between processes)
 extern bool mmapAlloc(const char *map_name, uint64_t bytes, void **addr_ret, MmapHandle *mmap_handle_ret, char *error_message);
 extern bool mmapGet(const char *map_name, uint64_t bytes, void **addr_ret, bool *got_it_ret, MmapHandle *mmap_handle_ret, char *error_message);
 extern bool mmapGetTimed(const char *mmap_name, uint64_t bytes, void **addr_ret, MmapHandle *mmap_handle_ret, int64_t timeout_ns, bool *timed_out_ret, char *error_message);
 extern bool mmapFree(MmapHandle mmap_handle, char *error_message);
+#ifdef WITH_CUDA
+// Check if local or remote addr is CUDA or CPU
+extern bool isCudaAddress(void *addr, bool *is_cuda_addr_ret, char *error_message);
+// Sharing a CUDA address
+extern bool cudaCreateIpcMapFromLocalAddr(void *cuda_addr, cudaIpcMemHandle_t *ipc_map_ret, char *error_message);
+extern void *cudaGetRemoteAddrFromIpcMap(cudaIpcMemHandle_t remote_ipc_map, char *error_message);
+extern bool cudaReleaseRemoteIpcMappedAddr(void *mapped_cuda_addr, char *error_message);
+// CUDA events need to synchronize cudaMemcpy() between processes
+extern bool cudaEventAlloc(int cuda_device_id, cudaEvent_t *event_ret, char *error_message);
+extern bool cudaEventFree(cudaEvent_t *event, char *error_message);
+extern bool cudaCreateIpcMapFromLocalEvent(cudaEvent_t *event, cudaIpcEventHandle_t *ipc_map_ret, char *error_message);
+extern bool cudaGetRemoteEventFromIpcMap(cudaIpcEventHandle_t remote_ipc_map, cudaEvent_t *remote_event_ret, char *error_message);
+extern bool cudaEventNotify(cudaEvent_t *event, char *error_message);
+extern bool cudaEventWait(cudaEvent_t *event, char *error_message);
+#endif
 
 // Thread Utils
 extern bool threadCondWait(pthread_mutex_t *mutex, pthread_cond_t *cond_var, int64_t timeout_ns, bool *timed_out_ret, char *error_message);
@@ -143,7 +165,7 @@ extern bool socketDatagramRecv(TakyonSocket socket_fd, void *data_ptr, size_t bu
 
 // Helpful socket functions
 extern bool socketSetBlocking(TakyonSocket socket_fd, bool is_blocking, char *error_message);
-extern bool socketWaitForDisconnectActivity(TakyonSocket socket_fd, int read_pipe_fd, bool *got_socket_activity_ret, char *error_message); /*+ rename to socketWaitForActivity */
+extern bool socketWaitForDisconnectActivity(TakyonSocket socket_fd, int read_pipe_fd, bool *got_socket_activity_ret, char *error_message);
 extern bool socketBarrier(bool is_client, TakyonSocket socket_fd, int barrier_id, int64_t timeout_ns, char *error_message);
 extern bool socketSwapAndVerifyInt(TakyonSocket socket_fd, int value, int64_t timeout_ns, char *error_message);
 extern bool socketSwapAndVerifyUInt64(TakyonSocket socket_fd, uint64_t value, int64_t timeout_ns, char *error_message);
@@ -180,7 +202,7 @@ extern void setUnicastSendSocketFunctionPointers(TakyonPrivatePath *private_path
 extern void setUnicastRecvSocketFunctionPointers(TakyonPrivatePath *private_path);
 extern void setMulticastSendSocketFunctionPointers(TakyonPrivatePath *private_path);
 extern void setMulticastRecvSocketFunctionPointers(TakyonPrivatePath *private_path);
-#ifdef BUILD_RDMA
+#ifdef WITH_RDMA
 extern void setRdmaFunctionPointers(TakyonPrivatePath *private_path);
 extern void setUnicastSendRdmaFunctionPointers(TakyonPrivatePath *private_path);
 extern void setUnicastRecvRdmaFunctionPointers(TakyonPrivatePath *private_path);

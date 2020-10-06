@@ -129,6 +129,9 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
     socketSetBlocking(buffers->socket_fd, 1, path->attrs.error_message);
   }
 
+  // Sleep here or else remote side might error out from a disconnect message while the remote process completing it's last transfer and waiting for any TCP ACKs to validate a complete transfer
+  clockSleepYield(MICROSECONDS_TO_SLEEP_BEFORE_DISCONNECTING);
+
   // If the barrier completed, the close will not likely hold up any data
   socketClose(buffers->socket_fd);
 

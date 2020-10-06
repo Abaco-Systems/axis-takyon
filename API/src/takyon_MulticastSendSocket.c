@@ -50,6 +50,18 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
   PathBuffers *buffers = (PathBuffers *)private_path->private_data;
   SingleBuffer *buffer = &buffers->send_buffer_list[buffer_index];
 
+  // Verify dest_offset is zero
+  if (dest_offset != 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect does not support non-zero destination offsets\n");
+    return false;
+  }
+
+  // Verify something is being sent
+  if (bytes == 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect does not support zero-byte transfer\n");
+    return false;
+  }
+
   // Verify connection is still good
   if (buffers->connection_failed) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "The connection is no longer valid\n");
@@ -154,6 +166,9 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
 
   // Extra cleanup
   free(buffers->sock_in_addr);
+
+  // Sleep here or else remote side might error out from a disconnect message while the remote process completing it's last transfer and waiting for any TCP ACKs to validate a complete transfer
+  clockSleepYield(MICROSECONDS_TO_SLEEP_BEFORE_DISCONNECTING);
 
   // If the barrier completed, the close will not likely hold up any data
   socketClose(buffers->socket_fd);

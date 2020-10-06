@@ -85,16 +85,18 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
   }
 
   // Send the data
-  if (!socketSend(buffers->socket_fd, sender_addr, bytes, path->attrs.is_polling, private_path->send_finish_timeout_ns, private_path->send_finish_timeout_ns, timed_out_ret, path->attrs.error_message)) {
-    buffers->connection_failed = true;
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to transfer data\n");
-    return false;
-  }
-  if ((private_path->send_finish_timeout_ns >= 0) && (*timed_out_ret == true)) {
-    // Timed out but data was transfered
-    buffers->connection_failed = true;
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Timed out in the middle of a transfer\n");
-    return false;
+  if (bytes > 0) {
+    if (!socketSend(buffers->socket_fd, sender_addr, bytes, path->attrs.is_polling, private_path->send_finish_timeout_ns, private_path->send_finish_timeout_ns, timed_out_ret, path->attrs.error_message)) {
+      buffers->connection_failed = true;
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to transfer data\n");
+      return false;
+    }
+    if ((private_path->send_finish_timeout_ns >= 0) && (*timed_out_ret == true)) {
+      // Timed out but data was transfered
+      buffers->connection_failed = true;
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Timed out in the middle of a transfer\n");
+      return false;
+    }
   }
   buffer->send_started = true;
 
@@ -214,17 +216,19 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Received data for index %d twice before the first was processed\n", recved_buffer_index);
       return false;
     }
-    void *recver_addr = (void *)(recver_buffer->recver_addr + recved_offset);
-    if (!socketRecv(buffers->socket_fd, recver_addr, recved_bytes, path->attrs.is_polling, private_path->recv_finish_timeout_ns, private_path->recv_finish_timeout_ns, timed_out_ret, path->attrs.error_message)) {
-      buffers->connection_failed = true;
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to receive data\n");
-      return false;
-    }
-    if ((private_path->recv_finish_timeout_ns >= 0) && (*timed_out_ret == true)) {
-      // Timed out but data was transfered
-      buffers->connection_failed = true;
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "timed out in the middle of a transfer\n");
-      return false;
+    if (recved_bytes > 0) {
+      void *recver_addr = (void *)(recver_buffer->recver_addr + recved_offset);
+      if (!socketRecv(buffers->socket_fd, recver_addr, recved_bytes, path->attrs.is_polling, private_path->recv_finish_timeout_ns, private_path->recv_finish_timeout_ns, timed_out_ret, path->attrs.error_message)) {
+        buffers->connection_failed = true;
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "failed to receive data\n");
+        return false;
+      }
+      if ((private_path->recv_finish_timeout_ns >= 0) && (*timed_out_ret == true)) {
+        // Timed out but data was transfered
+        buffers->connection_failed = true;
+        TAKYON_RECORD_ERROR(path->attrs.error_message, "timed out in the middle of a transfer\n");
+        return false;
+      }
     }
 
     if (recved_buffer_index == buffer_index) {
@@ -316,6 +320,9 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
         graceful_disconnect_ok = false;
       }
     }
+
+    // Sleep here or else remote side might error out from a disconnect message while the remote process completing it's last transfer and waiting for any TCP ACKs to validate a complete transfer
+    clockSleepYield(MICROSECONDS_TO_SLEEP_BEFORE_DISCONNECTING);
 
     // If the barrier completed, the close will not likely hold up any data
     socketClose(buffers->socket_fd);

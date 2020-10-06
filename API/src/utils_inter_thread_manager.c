@@ -182,7 +182,6 @@ InterThreadManagerItem *interThreadManagerConnect(uint32_t interconnect_id, uint
     item->connected = false;
     item->disconnected = false;
     item->connection_broken = false;
-    item->memory_buffers_syned = false;
     item->usage_count = 0;
     // Add to mutex manager list
     threadManagerAddItem(item);

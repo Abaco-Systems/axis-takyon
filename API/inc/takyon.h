@@ -33,9 +33,9 @@
 // -----------------------------------         --------------------                 ----------------------------------------------
 // InterProcessMemcpy -ID=<ID>                                                      InterProcessMemcpy -ID=<ID>
 // InterProcessPointer -ID=<ID>                                                     InterProcessPointer -ID=<ID>
-//     Both of the above interconnects can use the optional paramters:
-//        -appAllocedRecvMmap:      Use this flag if the application manually allocated shared MMAP buffers with the names "<name><index>". <index> starts from 0.
-//        -remoteMmapPrefix=<name>: If the remote side is using shared MMAP buffers, then need the prefix name.
+//     Both of the above interconnects can use the optional paramter:
+//        -recverAddrMmapNamePrefix=<name>:  For any receive side buffers that are application allocated, then the name the
+//                                           application used to allocated shared memory must be of the format: "<name><buffer_index>"
 // InterProcessSocket -ID=<ID>                                                      InterProcessSocket -ID=<ID>
 //
 // Endpoint (A or B)                           INTER-PROCESSOR PATHS                Endpoint (A or B: ooposite of remote endpoint)
@@ -63,8 +63,11 @@
 //     Valid group addresses: 224.0.0.0 through 239.255.255.255, but some are reserved
 //     Supported TTL values: 0=host, 1=subnet (default), 32=site, 64=region, 128=continent, 255=everywhere
 
+// For interconnects that can support CUDA memory buffers, the following are optional arguments:
+//          -srcCudaDeviceId=<id>    For Takyon managed source buffers, allocate on CUDA device <id>
+//          -destCudaDeviceId=<id>   For Takyon managed destination buffers, allocate on CUDA device <id>
 
-// All Takyon allocated data buffers are allocated on a page alignment (as defined by the OS). This is intended to provide better processing performance for things like vector math libraries.
+// All Takyon allocated data buffers are suitably aligned for any kind of variable. This is intended to provide better processing performance for things like vector math libraries.
 
 
 // Takyon constants

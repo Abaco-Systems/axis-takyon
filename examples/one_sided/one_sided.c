@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
   bool     is_endpointA    = false;
   int      nbufs           = 1;
   int      cycles          = 5;
-  uint64_t bytes           = 1024;
+  uint64_t bytes           = 1024; // Must be greater than 0
 
   if (argc < 2) {
     printf("Usage: connectionless <interconnect_spec> [options]\n");

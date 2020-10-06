@@ -48,10 +48,25 @@ DEBUG_CFLAGS    = -Zi -MDd # -MTd or -MDd
 #PTHREADS_INCLUDE = -I..\..\inc\windows
 PTHREADS_INCLUDE = -Ic:\pthreads4w\install\include
 
+# Check for CUDA integration
+!IF "$(WITH_CUDA)" == "Yes"
+!  IF "$(CUDA_HOME)" == ""
+!    ERROR 'CUDA_HOME environment variable not defined!'
+!  ENDIF
+CUDA_CFLAGS = -DWITH_CUDA -I"$(CUDA_HOME)\include"
+CUDA_C_FILES = utils_memory_cuda.c
+!  MESSAGE Enabling CUDA integration:
+!  MESSAGE CUDA_CFLAGS = $(CUDA_CFLAGS)
+!  MESSAGE
+!ELSE
+CUDA_CFLAGS =
+CUDA_C_FILES =
+!ENDIF
+
 DEBUG_LDFLAGS   = /DEBUG /FIXED:NO /NODEFAULTLIB:MSVCRT
 COMMON_FLAGS    = -nologo -Zm200 -D_CRT_SECURE_NO_WARNINGS=1 -WX -W3 -Zc:wchar_t- -w34189 -GR -EHsc
-CFLAGS          = $(RELEASE_CFLAGS) $(COMMON_FLAGS) -DBUILD_STATIC_LIB -I..\..\inc $(PTHREADS_INCLUDE)
-TAKYON_C_OBJS   = $(TAKYON_C_FILES:.c=.obj)
+CFLAGS          = $(RELEASE_CFLAGS) $(COMMON_FLAGS) -DBUILD_STATIC_LIB -I..\..\inc $(PTHREADS_INCLUDE) $(CUDA_CFLAGS)
+TAKYON_C_OBJS   = $(TAKYON_C_FILES:.c=.obj) $(CUDA_C_FILES:.c=.obj)
 LIBRARY         = TakyonStatic.lib
 
 all: $(LIBRARY)

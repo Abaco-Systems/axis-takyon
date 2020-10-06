@@ -1,0 +1,46 @@
+Groups
+Group: Hello
+  Instances: 2
+
+Processes
+Process: 0
+  GroupIDs: Hello[0]
+Process: 1
+  GroupIDs: Hello[1]
+
+Buffers
+Buffer: buf_B0
+  ProcessId: 1
+  Where: CUDA:0
+  Bytes: 1000
+Buffer: buf_B1
+  ProcessId: 1
+  Where: MMAP
+  Bytes: 1000
+# ------ Buffer 3: depends on if interconnect arguments exist; -destCudaDeviceId=<id>
+
+Paths
+Defaults
+  IsPolling: false, false
+  AbortOnFailure: true, true
+  Verbosity: TAKYON_VERBOSITY_ERRORS, TAKYON_VERBOSITY_ERRORS
+  PathCreateTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvStartTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  RecvFinishTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
+  SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
+  NBufsAtoB: 3, 3
+  NBufsBtoA: 1, 1
+  SenderMaxBytesList: 1000 1000 1000,    0
+  RecverMaxBytesList:              0, 1000 1000 1000
+Path: 0
+  Endpoints: Hello[0], Hello[1]
+  InterconnectA: InterProcessPointer -ID=1 -srcCudaDeviceId=0
+  InterconnectB: InterProcessPointer -ID=1 -destCudaDeviceId=0 -recverAddrMmapNamePrefix=buf_B
+  SenderAddrList: NULL NULL NULL, NULL
+  RecverAddrList:           NULL, buf_B0:0 buf_B1:0 NULL
+
+Collectives

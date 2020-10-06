@@ -21,26 +21,29 @@ bool takyonEndianIsBig() {
   }
 }
 
-void takyonEndianSwapUInt16(uint16_t *data, uint64_t num_elements) {
+void takyonEndianSwap2Byte(void *data, uint64_t num_elements) {
+  uint16_t *data2 = (uint16_t *)data;
   for (int i=0; i<num_elements; i++) {
-    uint16_t value = data[i];
-    data[i] = (value>>8) | (value<<8);
+    uint16_t value = data2[i];
+    data2[i] = (value>>8) | (value<<8);
   }
 }
 
-void takyonEndianSwapUInt32(uint32_t *data, uint64_t num_elements) {
+void takyonEndianSwap4Byte(void *data, uint64_t num_elements) {
+  uint32_t *data2 = (uint32_t *)data;
   for (int i=0; i<num_elements; i++) {
-    uint32_t value = data[i];
+    uint32_t value = data2[i];
     value = ((value << 8) & 0xFF00FF00) | ((value >> 8) & 0xFF00FF);
-    data[i] = (value << 16) | (value >> 16);
+    data2[i] = (value << 16) | (value >> 16);
   }
 }
 
-void takyonEndianSwapUInt64(uint64_t *data, uint64_t num_elements) {
+void takyonEndianSwap8Byte(uint64_t *data, uint64_t num_elements) {
+  uint64_t *data2 = (uint64_t *)data;
   for (int i=0; i<num_elements; i++) {
-    uint64_t value = data[i];
+    uint64_t value = data2[i];
     value = ((value << 8) & 0xFF00FF00FF00FF00ULL ) | ((value >> 8) & 0x00FF00FF00FF00FFULL );
     value = ((value << 16) & 0xFFFF0000FFFF0000ULL ) | ((value >> 16) & 0x0000FFFF0000FFFFULL );
-    data[i] = (value << 32) | (value >> 32);
+    data2[i] = (value << 32) | (value >> 32);
   }
 }
