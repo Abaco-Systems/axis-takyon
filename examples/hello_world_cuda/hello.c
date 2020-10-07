@@ -40,9 +40,9 @@ const char *endpointMemoryName(TakyonGraph *graph, bool for_endpointA, int buffe
   return "CPU-Takyon-managed";
 }
 
-void helloTask(TakyonGraph *graph, TakyonThread *thread_info) {
+void helloTask(TakyonGraph *graph, int group_id) {
   TakyonConnection *connection = &graph->path_list[0];
-  TakyonPath *path = (thread_info->group_id == connection->group_idA) ? connection->pathA : connection->pathB;
+  TakyonPath *path = (group_id == connection->group_idA) ? connection->pathA : connection->pathB;
   bool is_endpointA = path->attrs.is_endpointA;
   int nbufs_AtoB = path->attrs.nbufs_AtoB;
   uint64_t max_bytes = is_endpointA ? path->attrs.sender_max_bytes_list[0] : path->attrs.recver_max_bytes_list[0];

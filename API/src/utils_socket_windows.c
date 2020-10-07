@@ -828,7 +828,7 @@ bool socketCreateLocalServer(const char *socket_name, TakyonSocket *socket_fd_re
   // Wait for a client to ask for a connection
   if (timeout_ns >= 0) {
     if (!wait_for_socket_read_activity(listening_fd, timeout_ns, error_message)) {
-      TAKYON_RECORD_ERROR(error_message, "Fail to listen for connection\n");
+      TAKYON_RECORD_ERROR(error_message, "Failed to listen for connection\n");
       remove(port_number_filename);
       closesocket(listening_fd);
       return false;
@@ -941,7 +941,7 @@ bool socketCreateTcpServer(const char *ip_addr, uint16_t port_number, bool allow
   // Wait for a client to ask for a connection
   if (timeout_ns >= 0) {
     if (!wait_for_socket_read_activity(listening_fd, timeout_ns, error_message)) {
-      TAKYON_RECORD_ERROR(error_message, "Fail to listen for connection\n");
+      TAKYON_RECORD_ERROR(error_message, "Failed to listen for connection\n");
       closesocket(listening_fd);
       return false;
     }
@@ -1045,7 +1045,7 @@ bool socketCreateEphemeralTcpServer(const char *ip_addr, const char *interconnec
   // Wait for a client to ask for a connection
   if (timeout_ns >= 0) {
     if (!wait_for_socket_read_activity(listening_fd, timeout_ns, error_message)) {
-      TAKYON_RECORD_ERROR(error_message, "Fail to listen for connection\n");
+      TAKYON_RECORD_ERROR(error_message, "Failed to listen for connection\n");
       closesocket(listening_fd);
       return false;
     }

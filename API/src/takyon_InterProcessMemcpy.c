@@ -687,6 +687,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
       goto cleanup;
     }
   } else {
+    /*+ if the remote side has a lingering file with the port number, then the socket is create? Test with gather fault tolerant */
     if (!socketCreateLocalServer(socket_name, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create local server socket\n");
       goto cleanup;

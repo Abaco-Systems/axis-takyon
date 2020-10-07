@@ -12,9 +12,9 @@
 #include "takyon_extensions.h"
 #include "hello.h"
 
-void helloTask(TakyonGraph *graph, TakyonThread *thread_info) {
+void helloTask(TakyonGraph *graph, int group_id) {
   TakyonConnection *connection = &graph->path_list[0];
-  TakyonPath *path = (thread_info->group_id == connection->group_idA) ? connection->pathA : connection->pathB;
+  TakyonPath *path = (group_id == connection->group_idA) ? connection->pathA : connection->pathB;
   bool is_endpointA = path->attrs.is_endpointA;
   const char *message = is_endpointA ? "Hello from endpoint A" : "Hello from endpoint B";
   for (int i=0; i<5; i++) {

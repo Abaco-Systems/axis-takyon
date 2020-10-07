@@ -12,6 +12,6 @@
 #ifndef _reduce_h_
 #define _reduce_h_
 
-void reduceTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles, bool scatter_result);
+void reduceTask(TakyonGraph *graph, int group_id, int ncycles, bool scatter_result);
 
 #endif

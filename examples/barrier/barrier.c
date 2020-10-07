@@ -12,11 +12,11 @@
 #include "takyon_extensions.h"
 #include "barrier.h"
 
-void barrierTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
-  TakyonGroup *group = takyonGetGroup(graph, thread_info->group_id);
-  int pipe_index = takyonGetGroupInstance(graph, thread_info->group_id);
-  TakyonCollectiveBarrier *barrier = takyonGetBarrier(graph, "barrier", thread_info->group_id);
-  TakyonCollectiveOne2One *pipeline = takyonGetOne2One(graph, "pipeline", thread_info->group_id);
+void barrierTask(TakyonGraph *graph, int group_id, int ncycles) {
+  TakyonGroup *group = takyonGetGroup(graph, group_id);
+  int pipe_index = takyonGetGroupInstance(graph, group_id);
+  TakyonCollectiveBarrier *barrier = takyonGetBarrier(graph, "barrier", group_id);
+  TakyonCollectiveOne2One *pipeline = takyonGetOne2One(graph, "pipeline", group_id);
   TakyonPath *src_path = pipeline->src_path_list[0];
   TakyonPath *dest_path = pipeline->dest_path_list[0];
   int pipeline_buffer = 0;

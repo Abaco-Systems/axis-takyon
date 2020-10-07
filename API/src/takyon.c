@@ -124,6 +124,8 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     }
   }
 
+  // Allocate space for error messages
+  // IMPORTANT: If takyonCreate() fails, then the app must free this memory, otherwise Takyon will free this memory
   attributes->error_message = (char *)malloc(MAX_ERROR_MESSAGE_CHARS);
   if (attributes->error_message == NULL) {
     fprintf(stderr, "Out of memory when allocating attrs->error_message\n");

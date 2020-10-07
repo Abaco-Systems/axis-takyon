@@ -12,10 +12,10 @@
 #include "takyon_extensions.h"
 #include "pipeline.h"
 
-void pipelineTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
-  TakyonGroup *group = takyonGetGroup(graph, thread_info->group_id);
-  int pipe_index = takyonGetGroupInstance(graph, thread_info->group_id);
-  TakyonCollectiveOne2One *collective = takyonGetOne2One(graph, "pipeline", thread_info->group_id);
+void pipelineTask(TakyonGraph *graph, int group_id, int ncycles) {
+  TakyonGroup *group = takyonGetGroup(graph, group_id);
+  int pipe_index = takyonGetGroupInstance(graph, group_id);
+  TakyonCollectiveOne2One *collective = takyonGetOne2One(graph, "pipeline", group_id);
   TakyonPath *src_path = (collective->num_src_paths > 0) ? NULL : collective->src_path_list[0];
   TakyonPath *dest_path = (collective->num_dest_paths > 0) ? NULL : collective->dest_path_list[0];
   if ((src_path == NULL) && (dest_path == NULL)) {

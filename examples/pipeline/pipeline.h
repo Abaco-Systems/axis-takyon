@@ -12,6 +12,6 @@
 #ifndef _pipeline_h_
 #define _pipeline_h_
 
-void pipelineTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles);
+void pipelineTask(TakyonGraph *graph, int group_id, int ncycles);
 
 #endif

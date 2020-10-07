@@ -24,9 +24,9 @@ static void *thread_entry_function(void *user_data) {
 
   // Run correct thread
   if (strcmp(group->name, "parent")==0) {
-    parentTask(L_graph, thread_info, L_ncycles);
+    parentTask(L_graph, thread_info->group_id, L_ncycles);
   } else if (strcmp(group->name, "child")==0) {
-    childTask(L_graph, thread_info, L_ncycles);
+    childTask(L_graph, thread_info->group_id, L_ncycles);
   } else {
     printf("Could not find correct task to run in thread\n");
     exit(EXIT_FAILURE);

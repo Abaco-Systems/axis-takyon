@@ -21,7 +21,7 @@ static void *thread_entry_function(void *user_data) {
   // Create only the paths used in the group instance
   takyonCreateGroupPaths(L_graph, thread_info->group_id);
   // Run the processing (found in hello.c)
-  helloTask(L_graph, thread_info);
+  helloTask(L_graph, thread_info->group_id);
   // Destroy the paths
   takyonDestroyGroupPaths(L_graph, thread_info->group_id);
   return NULL;

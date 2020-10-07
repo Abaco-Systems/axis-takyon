@@ -12,9 +12,9 @@
 #include "takyon_extensions.h"
 #include "scatter_gather.h"
 
-void parentTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
-  TakyonScatterSrc *scatter_src = takyonGetScatterSrc(graph, "scatter", thread_info->group_id);
-  TakyonGatherDest *gather_dest = takyonGetGatherDest(graph, "gather", thread_info->group_id);
+void parentTask(TakyonGraph *graph, int group_id, int ncycles) {
+  TakyonScatterSrc *scatter_src = takyonGetScatterSrc(graph, "scatter", group_id);
+  TakyonGatherDest *gather_dest = takyonGetGatherDest(graph, "gather", group_id);
   int buffer = 0;
   int nbufs = scatter_src->path_list[0]->attrs.nbufs_AtoB;
   int num_children = scatter_src->npaths;
@@ -63,10 +63,10 @@ void parentTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
   free(doffset_list);
 }
 
-void childTask(TakyonGraph *graph, TakyonThread *thread_info, int ncycles) {
-  TakyonScatterDest *scatter_dest = takyonGetScatterDest(graph, "scatter", thread_info->group_id);
-  TakyonGatherSrc *gather_src = takyonGetGatherSrc(graph, "gather", thread_info->group_id);
-  int task_instance = takyonGetGroupInstance(graph, thread_info->group_id);
+void childTask(TakyonGraph *graph, int group_id, int ncycles) {
+  TakyonScatterDest *scatter_dest = takyonGetScatterDest(graph, "scatter", group_id);
+  TakyonGatherSrc *gather_src = takyonGetGatherSrc(graph, "gather", group_id);
+  int task_instance = takyonGetGroupInstance(graph, group_id);
   int buffer = 0;
   int nbufs = scatter_dest->path->attrs.nbufs_AtoB;
   uint64_t child_bytes = scatter_dest->path->attrs.recver_max_bytes_list[0];

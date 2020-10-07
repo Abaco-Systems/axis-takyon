@@ -20,7 +20,7 @@ static void *thread_entry_function(void *user_data) {
   // Create Takyon paths
   takyonCreateGroupPaths(L_graph, thread_info->group_id);
   // Run correct thread
-  pipelineTask(L_graph, thread_info, L_ncycles);
+  pipelineTask(L_graph, thread_info->group_id, L_ncycles);
   // Destroy Takyon paths
   takyonDestroyGroupPaths(L_graph, thread_info->group_id);
   return NULL;

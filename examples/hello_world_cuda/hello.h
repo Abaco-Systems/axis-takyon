@@ -16,6 +16,6 @@
 
 extern bool G_interconnect_is_shared_pointer;
 
-void helloTask(TakyonGraph *graph, TakyonThread *thread_info);
+void helloTask(TakyonGraph *graph, int group_id);
 
 #endif

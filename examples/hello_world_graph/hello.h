@@ -12,6 +12,6 @@
 #ifndef _hello_h_
 #define _hello_h_
 
-void helloTask(TakyonGraph *graph, TakyonThread *thread_info);
+void helloTask(TakyonGraph *graph, int group_id);
 
 #endif

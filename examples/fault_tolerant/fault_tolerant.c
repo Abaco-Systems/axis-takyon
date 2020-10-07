@@ -158,6 +158,7 @@ static void endpointTask(bool is_endpointA) {
     printf("Endpoint %s: Waiting for new connection\n", is_endpointA ? "A" : "B");
     TakyonPath *path = takyonCreate(&attrs);
     if (path == NULL) {
+      if (attrs.error_message != NULL) { free(attrs.error_message); attrs.error_message = NULL; }
       my_stats.connection_failures++;
       continue; // Try again
     }

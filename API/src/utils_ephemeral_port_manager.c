@@ -95,7 +95,7 @@ static void addItem(const char *interconnect_name, uint32_t path_id, uint16_t ep
 
   // Increase the size of the list if it's full
   if (item == NULL) {
-    L_manager_items = realloc(L_manager_items, 2*L_num_manager_items*sizeof(InterThreadManagerItem));
+    L_manager_items = realloc(L_manager_items, 2*L_num_manager_items*sizeof(EphemeralPortManagerItem));
     if (L_manager_items == NULL) {
       fprintf(stderr, "Out of memory\n");
       exit(EXIT_FAILURE);
