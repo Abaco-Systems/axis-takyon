@@ -648,7 +648,7 @@ static void getAddrList(TakyonGraph *graph, char *data, int *count_ret, size_t *
           exit(EXIT_FAILURE);
         }
         if (offset >= buffer->bytes) {
-          fprintf(stderr, "Line %d: The buffer with name='%s' does not have enough bytes for offset=%llu.\n", line_count, mem_name, offset);
+          fprintf(stderr, "Line %d: The buffer with name='%s' does not have enough bytes for offset=%ju.\n", line_count, mem_name, offset);
           exit(EXIT_FAILURE);
         }
         number = (size_t)buffer->addr + (size_t)offset;
