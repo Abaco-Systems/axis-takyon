@@ -176,7 +176,7 @@ static void takyonReduceRun(TakyonCollectiveReduce *collective, int buffer, uint
       exit(EXIT_FAILURE);
     }
     if (bytes_received != bytes_expected) {
-      fprintf(stderr, "%s(): Received %llu bytes but expected %llu\n", __FUNCTION__, (unsigned long long)bytes_received, (unsigned long long)bytes_expected);
+      fprintf(stderr, "%s(): Received %ju bytes but expected %ju\n", __FUNCTION__, bytes_received, bytes_expected);
       exit(EXIT_FAILURE);
     }
     // Reduce the data

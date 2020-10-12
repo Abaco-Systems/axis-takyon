@@ -72,7 +72,7 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
 
   // Since the source and dest buffers are the same buffer, make sure the offsets are the same
   if (src_offset != dest_offset) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The source offset=%lld and destination offset=%lld are not the same.\n", (unsigned long long)src_offset, (unsigned long long)dest_offset);
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "The source offset=%ju and destination offset=%ju are not the same.\n", src_offset, dest_offset);
     return false;
   }
 
@@ -165,13 +165,13 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
     buffer->got_data = false;
     // Verbosity
     if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV_MORE) {
-      printf("%-15s (%s:%s) Data was waiting: buf=%d, bytes=%lld, offset=%lld\n",
+      printf("%-15s (%s:%s) Data was waiting: buf=%d, bytes=%ju, offset=%ju\n",
              __FUNCTION__,
              path->attrs.is_endpointA ? "A" : "B",
              path->attrs.interconnect,
              buffer_index,
-             (unsigned long long)buffer->recved_bytes,
-             (unsigned long long)buffer->recved_offset);
+             buffer->recved_bytes,
+             buffer->recved_offset);
     }
     return true;
   }
@@ -207,13 +207,13 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
 
     // Verbosity
     if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV_MORE) {
-      printf("%-15s (%s:%s) Got header: buf=%d, bytes=%lld, offset=%lld\n",
+      printf("%-15s (%s:%s) Got header: buf=%d, bytes=%ju, offset=%ju\n",
              __FUNCTION__,
              path->attrs.is_endpointA ? "A" : "B",
              path->attrs.interconnect,
              recved_buffer_index,
-             (unsigned long long)recved_bytes,
-             (unsigned long long)recved_offset);
+             recved_bytes,
+             recved_offset);
     }
 
     // Verify the received data
@@ -222,7 +222,7 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
     uint64_t recver_max_bytes = path->attrs.recver_max_bytes_list[buffer_index];
     if (total_bytes > recver_max_bytes) {
       buffers->connected = false;
-      TAKYON_RECORD_ERROR(path->attrs.error_message, "Receiving out of bounds data. Max is %lld bytes but trying to recv %lld plus offset of %lld\n", (unsigned long long)recver_max_bytes, (unsigned long long)recved_bytes, (unsigned long long)recved_offset);
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Receiving out of bounds data. Max is %ju bytes but trying to recv %ju plus offset of %ju\n", recver_max_bytes, recved_bytes, recved_offset);
       return false;
     }
     if (recver_buffer->got_data) {
@@ -248,12 +248,12 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
       if (offset_ret != NULL) *offset_ret = recved_offset;
       // Verbosity
       if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV_MORE) {
-        printf("%-15s (%s:%s) Got data: %lld bytes at offset %lld on buffer %d\n",
+        printf("%-15s (%s:%s) Got data: %ju bytes at offset %ju on buffer %d\n",
                __FUNCTION__,
                path->attrs.is_endpointA ? "A" : "B",
                path->attrs.interconnect,
-               (unsigned long long)recved_bytes,
-               (unsigned long long)recved_offset,
+               recved_bytes,
+               recved_offset,
                buffer_index);
       }
       break;
@@ -709,7 +709,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 #endif
       if (alloc_mmap) {
         char local_mmap_name[MAX_MMAP_NAME_CHARS];
-        snprintf(local_mmap_name, MAX_MMAP_NAME_CHARS, "%s_%s_app_%d_%lld_%d", MMAP_NAME_PREFIX, path->attrs.is_endpointA ? "c" : "s", buf_index, (unsigned long long)recver_bytes, path_id);
+        snprintf(local_mmap_name, MAX_MMAP_NAME_CHARS, "%s_%s_app_%d_%ju_%d", MMAP_NAME_PREFIX, path->attrs.is_endpointA ? "c" : "s", buf_index, recver_bytes, path_id);
         if (!mmapAlloc(local_mmap_name, recver_bytes, &addr, &buffers->recv_buffer_list[buf_index].local_mmap_handle, path->attrs.error_message)) {
           TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create shared app memory: %s\n", local_mmap_name);
           goto cleanup;

@@ -262,15 +262,15 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
 
   // Verbosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV) {
-    printf("%-15s (%s:%s) buf=%d, addr=%llu, %lld bytes, soff=%lld, doff=%lld\n",
+    printf("%-15s (%s:%s) buf=%d, addr=%ju, %ju bytes, soff=%ju, doff=%ju\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
            path->attrs.interconnect,
            buffer_index,
-           (unsigned long long)path->attrs.sender_addr_list[buffer_index] + (unsigned long long)src_offset,
-           (unsigned long long)bytes,
-           (unsigned long long)src_offset,
-           (unsigned long long)dest_offset);
+           path->attrs.sender_addr_list[buffer_index] + src_offset,
+           bytes,
+           src_offset,
+           dest_offset);
   }
 
   // Error checking
@@ -293,7 +293,7 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
   uint64_t max_sender_bytes = path->attrs.sender_max_bytes_list[buffer_index];
   uint64_t total_bytes = bytes + src_offset;
   if (total_bytes > max_sender_bytes) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't send more than %lld bytes but trying to send %lld plus src_offset of %lld\n", (unsigned long long)max_sender_bytes, (unsigned long long)bytes, (unsigned long long)src_offset);
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't send more than %ju bytes but trying to send %ju plus src_offset of %ju\n", max_sender_bytes, bytes, src_offset);
     return false;
   }
 

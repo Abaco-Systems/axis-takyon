@@ -157,7 +157,7 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
   uint64_t max_bytes = path->attrs.recver_max_bytes_list[buffer_index];
   if (total_bytes > max_bytes) {
     buffers->connection_failed = true;
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Receiving out of bounds data. *bytes = %lld and *offset = %lld, but the buffer size is %lld. Make sure the values of 'bytes' and 'offset' are set before making the call to takyonRecv(), this is just a special case with this interconnect since the remote side does not send a header with that information.\n", (unsigned long long)*bytes_ret, (unsigned long long)*offset_ret, (unsigned long long)max_bytes);
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Receiving out of bounds data. *bytes = %ju and *offset = %ju, but the buffer size is %ju. Make sure the values of 'bytes' and 'offset' are set before making the call to takyonRecv(), this is just a special case with this interconnect since the remote side does not send a header with that information.\n", *bytes_ret, *offset_ret, max_bytes);
     return false;
   }
 
@@ -175,11 +175,11 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
 
   // Verbosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV_MORE) {
-    printf("%-15s (%s:%s) Got data: %lld bytes on buffer %d\n",
+    printf("%-15s (%s:%s) Got data: %ju bytes on buffer %d\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
            path->attrs.interconnect,
-           (unsigned long long)max_bytes,
+           max_bytes,
            buffer_index);
   }
 

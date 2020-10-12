@@ -224,12 +224,12 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
 
   // Verbosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV_MORE) {
-    printf("%-15s (%s:%s) Received %lld bytes, at offset %lld, on buffer %d\n",
+    printf("%-15s (%s:%s) Received %ju bytes, at offset %ju, on buffer %d\n",
            __FUNCTION__,
            path->attrs.is_endpointA ? "A" : "B",
            path->attrs.interconnect,
-           (unsigned long long)buffer->bytes_recved,
-           (unsigned long long)buffer->offset_recved,
+           buffer->bytes_recved,
+           buffer->offset_recved,
            buffer_index);
   }
 

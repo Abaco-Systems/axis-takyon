@@ -311,8 +311,8 @@ static int getIntValue(const char *data, int line_count, int min_value) {
 }
 
 static uint64_t getUInt64Value(const char *data, int line_count) {
-  unsigned long long number;
-  int tokens = sscanf(data, "%llu", &number);
+  uint64_t number;
+  int tokens = sscanf(data, "%ju", &number);
   if (tokens != 1) {
     fprintf(stderr, "Line %d: numbers must be greater or equal to zero. Found: %s\n", line_count, data);
     exit(EXIT_FAILURE);
@@ -636,8 +636,8 @@ static void getAddrList(TakyonGraph *graph, char *data, int *count_ret, size_t *
           }
           mem_name[i] = keyword[i];
         }
-        unsigned long long offset;
-        int tokens = sscanf(&keyword[colon_index], ":%llu", &offset);
+        uint64_t offset;
+        int tokens = sscanf(&keyword[colon_index], ":%ju", &offset);
         if (tokens != 1) {
           fprintf(stderr, "Line %d: '%s' is not a valid address. Must be 'NULL' or '<buffer_name>:<offset>'\n", line_count, keyword);
           exit(EXIT_FAILURE);
@@ -832,7 +832,7 @@ static char *parseBuffers(int my_process_id, TakyonGraph *graph, char *data_ptr,
       // This is the process that allocates the memory
       buffer->addr = appAllocateMemory(buffer->name, buffer->where, buffer->bytes, &buffer->user_data);
       if (buffer->addr == NULL) {
-        fprintf(stderr, "Application falied to return a valid address: takyonAllocateMemory(name='%s', where='%s', bytes=%llu)\n", buffer->name, buffer->where, (unsigned long long)buffer->bytes);
+        fprintf(stderr, "Application falied to return a valid address: takyonAllocateMemory(name='%s', where='%s', bytes=%ju)\n", buffer->name, buffer->where, buffer->bytes);
         exit(EXIT_FAILURE);
       }
     }
@@ -1497,7 +1497,7 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
     printf("\n");
     for (int j=0; j<process_desc->buffer_count; j++) {
       TakyonBuffer *buffer = &process_desc->buffer_list[j];
-      printf("    Buffer '%s': where='%s', bytes=%lld, addr=0x%llx\n", buffer->name, buffer->where, (unsigned long long)buffer->bytes, (unsigned long long)buffer->addr);
+      printf("    Buffer '%s': where='%s', bytes=%ju, addr=%p\n", buffer->name, buffer->where, buffer->bytes, buffer->addr);
     }
   }
 #endif
@@ -1536,7 +1536,7 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
       printf("      Interconnect: %s\n", path_desc->attrsA.interconnect);
       printf("      is_polling: %s\n", path_desc->attrsA.is_polling ? "Yes" : "No");
       printf("      abort_on_failure: %s\n", path_desc->attrsA.abort_on_failure ? "Yes" : "No");
-      printf("      verbosity: 0x%llx\n", (unsigned long long)path_desc->attrsA.verbosity);
+      printf("      verbosity: 0x%jx\n", path_desc->attrsA.verbosity);
       printf("      path_create_timeout: %lf\n", path_desc->attrsA.path_create_timeout);
       printf("      send_start_timeout: %lf\n", path_desc->attrsA.send_start_timeout);
       printf("      send_finish_timeout: %lf\n", path_desc->attrsA.send_finish_timeout);
@@ -1549,22 +1549,22 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
       printf("      nbufs_BtoA: %d\n", path_desc->attrsA.nbufs_BtoA);
       printf("      sender_max_bytes_list:");
       for (int j=0; j<path_desc->attrsA.nbufs_AtoB; j++) {
-        printf(" %llu", (unsigned long long)path_desc->attrsA.sender_max_bytes_list[j]);
+        printf(" %ju", path_desc->attrsA.sender_max_bytes_list[j]);
       }
       printf("\n");
       printf("      recver_max_bytes_list:");
       for (int j=0; j<path_desc->attrsA.nbufs_BtoA; j++) {
-        printf(" %llu", (unsigned long long)path_desc->attrsA.recver_max_bytes_list[j]);
+        printf(" %ju", path_desc->attrsA.recver_max_bytes_list[j]);
       }
       printf("\n");
       printf("      sender_addr_list:");
       for (int j=0; j<path_desc->attrsA.nbufs_AtoB; j++) {
-        printf(" 0x%llx", (unsigned long long)path_desc->attrsA.sender_addr_list[j]);
+        printf(" %p", (void *)path_desc->attrsA.sender_addr_list[j]);
       }
       printf("\n");
       printf("      recver_addr_list:");
       for (int j=0; j<path_desc->attrsA.nbufs_BtoA; j++) {
-        printf(" 0x%llx", (unsigned long long)path_desc->attrsA.recver_addr_list[j]);
+        printf(" %p", (void *)path_desc->attrsA.recver_addr_list[j]);
       }
       printf("\n");
     }
@@ -1575,7 +1575,7 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
       printf("      Interconnect: %s\n", path_desc->attrsB.interconnect);
       printf("      is_polling: %s\n", path_desc->attrsB.is_polling ? "Yes" : "No");
       printf("      abort_on_failure: %s\n", path_desc->attrsB.abort_on_failure ? "Yes" : "No");
-      printf("      verbosity: 0x%llx\n", (unsigned long long)path_desc->attrsB.verbosity);
+      printf("      verbosity: 0x%jx\n", path_desc->attrsB.verbosity);
       printf("      path_create_timeout: %lf\n", path_desc->attrsB.path_create_timeout);
       printf("      send_start_timeout: %lf\n", path_desc->attrsB.send_start_timeout);
       printf("      send_finish_timeout: %lf\n", path_desc->attrsB.send_finish_timeout);
@@ -1588,22 +1588,22 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
       printf("      nbufs_BtoA: %d\n", path_desc->attrsB.nbufs_BtoA);
       printf("      sender_max_bytes_list:");
       for (int j=0; j<path_desc->attrsB.nbufs_AtoB; j++) {
-        printf(" %llu", (unsigned long long)path_desc->attrsB.sender_max_bytes_list[j]);
+        printf(" %ju", path_desc->attrsB.sender_max_bytes_list[j]);
       }
       printf("\n");
       printf("      recver_max_bytes_list:");
       for (int j=0; j<path_desc->attrsB.nbufs_BtoA; j++) {
-        printf(" %llu", (unsigned long long)path_desc->attrsB.recver_max_bytes_list[j]);
+        printf(" %ju", path_desc->attrsB.recver_max_bytes_list[j]);
       }
       printf("\n");
       printf("      sender_addr_list:");
       for (int j=0; j<path_desc->attrsB.nbufs_AtoB; j++) {
-        printf(" %llu", (unsigned long long)path_desc->attrsB.sender_addr_list[j]);
+        printf(" %p", (void *)path_desc->attrsB.sender_addr_list[j]);
       }
       printf("\n");
       printf("      recver_addr_list:");
       for (int j=0; j<path_desc->attrsB.nbufs_BtoA; j++) {
-        printf(" %llu", (unsigned long long)path_desc->attrsB.recver_addr_list[j]);
+        printf(" %p", (void *)path_desc->attrsB.recver_addr_list[j]);
       }
       printf("\n");
     }
@@ -2022,7 +2022,7 @@ void takyonPrintGraph(TakyonGraph *graph) {
     printf("\n");
     for (int j=0; j<process_desc->buffer_count; j++) {
       TakyonBuffer *buffer = &process_desc->buffer_list[j];
-      printf("      Buffer '%s': where='%s', bytes=%lld, addr=0x%llx\n", buffer->name, buffer->where, (unsigned long long)buffer->bytes, (unsigned long long)buffer->addr);
+      printf("      Buffer '%s': where='%s', bytes=%ju, addr=%p\n", buffer->name, buffer->where, buffer->bytes, buffer->addr);
     }
   }
 

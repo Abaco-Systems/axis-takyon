@@ -194,7 +194,7 @@ void takyonMmapAlloc(const char *map_name, uint64_t bytes, void **addr_ret, Taky
   rc = ftruncate(mapping_fd, bytes);
   if (rc == -1) {
     close(mapping_fd);
-    fprintf(stderr, "Could not set shared memory size '%s' to %lld bytes\n", full_map_name, (unsigned long long)bytes);
+    fprintf(stderr, "Could not set shared memory size '%s' to %ju bytes\n", full_map_name, bytes);
     exit(EXIT_FAILURE);
   }
 

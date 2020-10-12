@@ -86,10 +86,10 @@ GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *byt
 
   // Verbosity
   if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV_MORE) {
-    printf("%-15s (%s) Got data: %lld bytes on buffer %d\n",
+    printf("%-15s (%s) Got data: %ju bytes on buffer %d\n",
            __FUNCTION__,
            path->attrs.interconnect,
-           (unsigned long long)bytes_read,
+           bytes_read,
            buffer_index);
   }
 

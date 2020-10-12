@@ -71,7 +71,7 @@ static void verifyTestData(uint8_t *data, uint64_t bytes, int cycle) {
     uint8_t got = data[i];
     uint8_t expected = (cycle+i) % 256;
     if (got != expected) {
-      printf("ERROR at cycle %d: data[%lld] wrong, got %lld but expected %lld\n", cycle, (unsigned long long)i, (unsigned long long)got, (unsigned long long)expected);
+      printf("ERROR at cycle %d: data[%ju] wrong, got %u but expected %u\n", cycle, i, got, expected);
       exit(0);
     }
   }
@@ -90,7 +90,7 @@ static void endpointTask(bool is_endpointA) {
     printf("  locality:          %s\n", L_is_multi_threaded ? "inter-thread" : "inter-process");
     printf("  mode:              %s\n", L_is_polling ? "polling" : "event driven");
     printf("  nbufs:             %d\n", L_nbufs);
-    printf("  nbytes:            %lld\n", (unsigned long long)L_nbytes);
+    printf("  nbytes:            %ju\n", L_nbytes);
     printf("  cycles:            %d\n", L_ncycles);
     printf("  prime cycles:      %d\n", L_nprime_cycles);
     printf("  data validation:   %s\n", L_validate_data ? "on" : "off");
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
     printf("    -endpointA          If not multi threaded, then this process is marked as endpoint A (default is endpoint B)\n");
     printf("    -poll               Enable polling communication (default is event driven)\n");
     printf("    -nbufs <N>          Number of buffers. Default is %d\n", L_nbufs);
-    printf("    -nbytes <N>         Min message size in bytes. Default is %lld\n", (unsigned long long)L_nbytes);
+    printf("    -nbytes <N>         Min message size in bytes. Default is %ju\n", L_nbytes);
     printf("    -ncycles <N>        Number of cycles at each byte size to time. Default is %d\n", L_ncycles);
     printf("    -nprime_cycles <N>  Number of cycles at start of each byte size to do before starting timer. Default is %d\n", L_nprime_cycles);
     printf("    -validate           Validate data being transferred. Default is off\n");

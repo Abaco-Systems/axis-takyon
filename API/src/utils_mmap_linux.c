@@ -86,7 +86,7 @@ bool mmapAlloc(const char *map_name, uint64_t bytes, void **addr_ret, MmapHandle
   rc = ftruncate(mapping_fd, bytes);
   if (rc == -1) {
     close(mapping_fd);
-    TAKYON_RECORD_ERROR(error_message, "could not set shared memory size '%s' to %lld bytes\n", full_map_name, (unsigned long long)bytes);
+    TAKYON_RECORD_ERROR(error_message, "could not set shared memory size '%s' to %ju bytes\n", full_map_name, bytes);
     return false;
   }
 

@@ -71,13 +71,13 @@ static void fillInTestData(uint8_t *data, uint64_t bytes, int cycle) {
 }
 
 static void verifyTestData(uint8_t *data, uint64_t bytes, int cycle, uint64_t bytes_received, uint64_t offset) {
-  if (bytes != bytes_received) { printf("ERROR at cycle %d: 'bytes_received' wrong, got %lld but expected %lld\n", cycle, (unsigned long long)bytes, (unsigned long long)bytes_received); exit(0); }
-  if (offset != 0) { printf("ERROR at cycle %d: 'offset' wrong, got %lld but expected 0\n", cycle, (unsigned long long)offset); exit(0); }
+  if (bytes != bytes_received) { printf("ERROR at cycle %d: 'bytes_received' wrong, got %ju but expected %ju\n", cycle, bytes, bytes_received); exit(0); }
+  if (offset != 0) { printf("ERROR at cycle %d: 'offset' wrong, got %ju but expected 0\n", cycle, offset); exit(0); }
   for (uint64_t i=0; i<bytes; i++) {
     uint8_t got = data[i];
     uint8_t expected = (cycle+i) % 256;
     if (got != expected) {
-      printf("ERROR at cycle %d: data[%lld] wrong, got %lld but expected %lld\n", cycle, (unsigned long long)i, (unsigned long long)got, (unsigned long long)expected);
+      printf("ERROR at cycle %d: data[%ju] wrong, got %u but expected %u\n", cycle, i, got, expected);
       exit(0);
     }
   }
@@ -110,7 +110,7 @@ static void testThroughput(TakyonPath *path) {
       double elapsed_seconds = takyonTime()-time1;
       double total_Mbytes = ((double)bytes * L_ncycles * L_nbufs) / 1000000.0;
       double Mbytes_per_second = total_Mbytes / elapsed_seconds;
-      printf("   %8lld bytes  %11.2f MBytes/sec\n", (unsigned long long)bytes, Mbytes_per_second);
+      printf("   %8ju bytes  %11.2f MBytes/sec\n", bytes, Mbytes_per_second);
 
     } else {
       // Endpoint B: Waits for messages one all buffers, then sends a single synchronization message back
@@ -151,7 +151,7 @@ static void testLatency(TakyonPath *path) {
       double elapsed_seconds = takyonTime()-time1;
       double half_trip_seconds_per_cycle = elapsed_seconds / (L_ncycles * 2.0);
       double latency_usecs = half_trip_seconds_per_cycle*1000000.0;
-      printf("  %8lld bytes  %10.2f usecs\n", (unsigned long long)bytes, latency_usecs);
+      printf("  %8ju bytes  %10.2f usecs\n", bytes, latency_usecs);
 
     } else {
       // Endpoint B: waits for a message and then sends it right back
@@ -179,8 +179,8 @@ static void endpointTask(bool is_endpointA) {
     printf("  locality:        %s\n", L_is_multi_threaded ? "inter-thread" : "inter-process");
     printf("  mode:            %s\n", L_is_polling ? "polling" : "event driven");
     printf("  nbufs:           %d\n", L_nbufs);
-    printf("  max bytes:       %lld\n", (unsigned long long)L_max_bytes);
-    printf("  min bytes:       %lld\n", (unsigned long long)L_min_bytes);
+    printf("  max bytes:       %ju\n", L_max_bytes);
+    printf("  min bytes:       %ju\n", L_min_bytes);
     printf("  cycles:          %d\n", L_ncycles);
     printf("  prime cycles:    %d\n", L_nprime_cycles);
     printf("  data validation: %s\n\n", L_validate_data ? "on" : "off");
@@ -236,8 +236,8 @@ int main(int argc, char **argv) {
     printf("    -tp                Only test throughput (default is to test latency and throughput)\n");
     printf("    -poll              Enable polling communication (default is event driven)\n");
     printf("    -nbufs <N>         Number of buffers. Default is %d\n", L_nbufs);
-    printf("    -min_bytes <N>     Min message size in bytes. Default is %lld\n", (unsigned long long)L_min_bytes);
-    printf("    -max_bytes <N>     Max message size in bytes. Default is %lld\n", (unsigned long long)L_max_bytes);
+    printf("    -min_bytes <N>     Min message size in bytes. Default is %ju\n", L_min_bytes);
+    printf("    -max_bytes <N>     Max message size in bytes. Default is %ju\n", L_max_bytes);
     printf("    -ncycles <N>       Number of cycles at each byte size to time. Default is %d\n", L_ncycles);
     printf("    -nprime_cycles <N> Number of cycles at start of each byte size to do before starting timer. Default is %d\n", L_nprime_cycles);
     printf("    -validate          Validate data being transferred. Default is off\n");

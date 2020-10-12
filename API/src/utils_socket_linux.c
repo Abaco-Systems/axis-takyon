@@ -172,7 +172,7 @@ static bool socket_send_event_driven(int socket_fd, void *addr, size_t total_byt
           }
         } else {
           // This is bad... the connection might have gone down while in the middle of sending
-          TAKYON_RECORD_ERROR(error_message, "Timed out in the middle of a send transfer: total_bytes_sent=%lld\n", (unsigned long long)total_bytes_sent);
+          TAKYON_RECORD_ERROR(error_message, "Timed out in the middle of a send transfer: total_bytes_sent=%ju\n", total_bytes_sent);
           return false;
         }
       } else if (errno == EINTR) {
@@ -229,7 +229,7 @@ static bool socket_send_polling(int socket, void *addr, size_t total_bytes_to_wr
               }
             } else {
               // This is bad... the connection might have gone down while in the middle of sending
-              TAKYON_RECORD_ERROR(error_message, "Timed out in the middle of a send transfer: total_bytes_sent=%lld\n", (unsigned long long)total_bytes_sent);
+              TAKYON_RECORD_ERROR(error_message, "Timed out in the middle of a send transfer: total_bytes_sent=%ju\n", total_bytes_sent);
               return false;
             }
           }
