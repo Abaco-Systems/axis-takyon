@@ -28,11 +28,11 @@ Defaults
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   NBufsAtoB: 2, 2
-  NBufsBtoA: 2, 2
-  SenderMaxBytesList: 100000 100000, 100000 100000
-  RecverMaxBytesList: 100000 100000, 100000 100000
-  SenderAddrList: NULL NULL, NULL NULL
-  RecverAddrList: NULL NULL, NULL NULL
+  NBufsBtoA: 1, 1
+  SenderMaxBytesList: 100000 100000, 0
+  RecverMaxBytesList: 0, 100000 100000
+  SenderAddrList: NULL NULL, NULL
+  RecverAddrList: NULL, NULL NULL
 Path: 0
   Endpoints: pipe[0], pipe[1]
   InterconnectA: InterProcessSocket -ID=1

@@ -38,6 +38,7 @@ typedef struct {
   SingleBuffer *send_buffer_list;
   SingleBuffer *recv_buffer_list;
   TakyonSocket socket_fd;
+  bool using_ephemeral_port_manager;
   bool connection_made;
   bool connection_failed;
 } PathBuffers;
@@ -282,6 +283,11 @@ static void freePathResources(TakyonPath *path) {
     free(buffers->recv_buffer_list);
   }
 
+  // See if ephemeral port manager needs to be stopped
+  if (buffers->using_ephemeral_port_manager) {
+    ephemeralPortManagerFinalize();
+  }
+
   // Free the private handle
   free(buffers);
 }
@@ -335,16 +341,6 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
 }
 
 GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
-  // Verify the number of buffers
-  if (path->attrs.nbufs_AtoB <= 0) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
-    return false;
-  }
-  if (path->attrs.nbufs_BtoA <= 0) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
-    return false;
-  }
-
   // Supported formats:
   //   User assigned port number:
   //   "Socket -client -IP=<IP> -port=<port>"
@@ -433,15 +429,19 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   // Allocate the buffers list
   int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
   int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  buffers->send_buffer_list = calloc(nbufs_sender, sizeof(SingleBuffer));
-  if (buffers->send_buffer_list == NULL) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
-    goto cleanup;
+  if (nbufs_sender > 0) {
+    buffers->send_buffer_list = calloc(nbufs_sender, sizeof(SingleBuffer));
+    if (buffers->send_buffer_list == NULL) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
+      goto cleanup;
+    }
   }
-  buffers->recv_buffer_list = calloc(nbufs_recver, sizeof(SingleBuffer));
-  if (buffers->recv_buffer_list == NULL) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
-    goto cleanup;
+  if (nbufs_recver > 0) {
+    buffers->recv_buffer_list = calloc(nbufs_recver, sizeof(SingleBuffer));
+    if (buffers->recv_buffer_list == NULL) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
+      goto cleanup;
+    }
   }
 
   // Fill in some initial fields
@@ -498,6 +498,12 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
       path->attrs.recver_addr_list[buf_index] = (size_t)addr;
       buffers->recv_buffer_list[buf_index].recver_addr = (size_t)addr;
     }
+  }
+
+  // See if the ephemeral port manager needs to get started
+  if (path_id_found) {
+    ephemeralPortManagerInit(path->attrs.verbosity);
+    buffers->using_ephemeral_port_manager = true;
   }
 
   // Create the socket and connect with remote endpoint

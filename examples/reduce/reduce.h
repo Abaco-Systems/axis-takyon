@@ -12,6 +12,8 @@
 #ifndef _reduce_h_
 #define _reduce_h_
 
+#include "takyon_extensions.h"
+
 void reduceTask(TakyonGraph *graph, int group_id, int ncycles, bool scatter_result);
 
 #endif

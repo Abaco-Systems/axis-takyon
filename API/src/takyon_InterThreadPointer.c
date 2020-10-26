@@ -264,6 +264,9 @@ static bool freePathMemoryResources(TakyonPath *path) {
   // Free the private handle
   free(buffers);
 
+  // Let the thread manager know it's done with this thread
+  interThreadManagerFinalize();
+
   return true;
 }
 
@@ -300,16 +303,6 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   //   "InterThreadPointer -ID=<ID>"
   // WITH_CUDA extras:
   //   [-destCudaDeviceId=<id>]   If Takyon allocates the destination buffers, then use cudaMalloc() on CUDA device <id>. If not specified, a CPU allocation is done if not pre-allocated.
-
-  // Verify the number of buffers
-  if (path->attrs.nbufs_AtoB <= 0) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_AtoB > 0\n");
-    return false;
-  }
-  if (path->attrs.nbufs_BtoA <= 0) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect requires attributes->nbufs_BtoA > 0\n");
-    return false;
-  }
 
   // Call this to make sure the mutex manager is ready to coordinate: This can be called multiple times, but it's guaranteed to atomically run only the first time called.
   if (!interThreadManagerInit()) {
@@ -365,15 +358,19 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 
   // Allocate the buffers list
   int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
-  buffers->send_buffer_list = calloc(nbufs_sender, sizeof(SingleBuffer));
-  if (buffers->send_buffer_list == NULL) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
-    goto cleanup;
+  if (nbufs_sender > 0) {
+    buffers->send_buffer_list = calloc(nbufs_sender, sizeof(SingleBuffer));
+    if (buffers->send_buffer_list == NULL) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
+      goto cleanup;
+    }
   }
-  buffers->recv_buffer_list = calloc(nbufs_recver, sizeof(SingleBuffer));
-  if (buffers->recv_buffer_list == NULL) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
-    goto cleanup;
+  if (nbufs_recver > 0) {
+    buffers->recv_buffer_list = calloc(nbufs_recver, sizeof(SingleBuffer));
+    if (buffers->recv_buffer_list == NULL) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Out of memory\n");
+      goto cleanup;
+    }
   }
 
   // Fill in some initial fields

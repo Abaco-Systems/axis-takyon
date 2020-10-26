@@ -510,15 +510,19 @@ static void getUInt64List(char *data, int *count_ret, uint64_t **uint64_list_ret
   static char value[MAX_VALUE_BYTES];
   int count = 0;
   uint64_t *uint64_list = NULL;
-  while (data != NULL) {
-    data = getNextKeyValue(data, keyword, value, &line_count);
-    if (data != NULL) {
-      uint64_t number = getUInt64Value(keyword, line_count);
-      count++;
-      uint64_list = realloc(uint64_list, count * sizeof(uint64_t));
-      validateAllocation(uint64_list, __FUNCTION__);
-      uint64_list[count-1] = number;
-      strcpy(data, value);
+  // NOTE: allow "-" to mean there are no values
+  if (strcmp(data, "-") != 0) {
+    // Valid values should exist
+    while (data != NULL) {
+      data = getNextKeyValue(data, keyword, value, &line_count);
+      if (data != NULL) {
+        uint64_t number = getUInt64Value(keyword, line_count);
+        count++;
+        uint64_list = realloc(uint64_list, count * sizeof(uint64_t));
+        validateAllocation(uint64_list, __FUNCTION__);
+        uint64_list[count-1] = number;
+        strcpy(data, value);
+      }
     }
   }
   *count_ret = count;
@@ -617,48 +621,52 @@ static void getAddrList(TakyonGraph *graph, char *data, int *count_ret, size_t *
   static char value[MAX_VALUE_BYTES];
   int count = 0;
   size_t *addr_list = NULL;
-  while (data != NULL) {
-    data = getNextKeyValue(data, keyword, value, &line_count);
-    if (data != NULL) {
-      size_t number = 0;
-      if (strcmp(keyword, "NULL") == 0) {
-        number = 0;
-      } else {
-        // Check for: <buffer_name>:<offset>
-        static char mem_name[MAX_VALUE_BYTES];
-        size_t length = strlen(keyword);
-        size_t colon_index = 0;
-        for (size_t i=0; i<length; i++) {
-          if (keyword[i] == ':') {
-            colon_index = i;
-            mem_name[i] = '\0';
-            break;
+  // NOTE: allow "-" to mean there are no values
+  if (strcmp(data, "-") != 0) {
+    // Valid values should exist
+    while (data != NULL) {
+      data = getNextKeyValue(data, keyword, value, &line_count);
+      if (data != NULL) {
+        size_t number = 0;
+        if (strcmp(keyword, "NULL") == 0) {
+          number = 0;
+        } else {
+          // Check for: <buffer_name>:<offset>
+          static char mem_name[MAX_VALUE_BYTES];
+          size_t length = strlen(keyword);
+          size_t colon_index = 0;
+          for (size_t i=0; i<length; i++) {
+            if (keyword[i] == ':') {
+              colon_index = i;
+              mem_name[i] = '\0';
+              break;
+            }
+            mem_name[i] = keyword[i];
           }
-          mem_name[i] = keyword[i];
+          uint64_t offset;
+          int tokens = sscanf(&keyword[colon_index], ":%ju", &offset);
+          if (tokens != 1) {
+            fprintf(stderr, "Line %d: '%s' is not a valid address. Must be 'NULL' or '<buffer_name>:<offset>'\n", line_count, keyword);
+            exit(EXIT_FAILURE);
+          }
+          TakyonBuffer *buffer = getBuffer(graph, mem_name);
+          if (buffer == NULL) {
+            fprintf(stderr, "Line %d: The buffer with name='%s' was not defined in the 'Buffers' section.\n", line_count, mem_name);
+            exit(EXIT_FAILURE);
+          }
+          if (offset >= buffer->bytes) {
+            fprintf(stderr, "Line %d: The buffer with name='%s' does not have enough bytes for offset=%ju.\n", line_count, mem_name, offset);
+            exit(EXIT_FAILURE);
+          }
+          number = (size_t)buffer->addr + (size_t)offset;
         }
-        uint64_t offset;
-        int tokens = sscanf(&keyword[colon_index], ":%ju", &offset);
-        if (tokens != 1) {
-          fprintf(stderr, "Line %d: '%s' is not a valid address. Must be 'NULL' or '<buffer_name>:<offset>'\n", line_count, keyword);
-          exit(EXIT_FAILURE);
-        }
-        TakyonBuffer *buffer = getBuffer(graph, mem_name);
-        if (buffer == NULL) {
-          fprintf(stderr, "Line %d: The buffer with name='%s' was not defined in the 'Buffers' section.\n", line_count, mem_name);
-          exit(EXIT_FAILURE);
-        }
-        if (offset >= buffer->bytes) {
-          fprintf(stderr, "Line %d: The buffer with name='%s' does not have enough bytes for offset=%ju.\n", line_count, mem_name, offset);
-          exit(EXIT_FAILURE);
-        }
-        number = (size_t)buffer->addr + (size_t)offset;
-      }
 
-      count++;
-      addr_list = realloc(addr_list, count * sizeof(size_t));
-      validateAllocation(addr_list, __FUNCTION__);
-      addr_list[count-1] = number;
-      strcpy(data, value);
+        count++;
+        addr_list = realloc(addr_list, count * sizeof(size_t));
+        validateAllocation(addr_list, __FUNCTION__);
+        addr_list[count-1] = number;
+        strcpy(data, value);
+      }
     }
   }
   *count_ret = count;
@@ -1020,36 +1028,26 @@ static void setParamDefaultValueCompletionMethod(PathParam *param, const char *n
 static void setParamDefaultValueUInt64List(PathParam *param, const char *name, uint64_t value) {
   strcpy(param->name, name);
   param->type = PARAM_TYPE_UINT64_LIST;
-  param->uint64_listA = (uint64_t *)malloc(sizeof(uint64_t));
-  param->uint64_listB = (uint64_t *)malloc(sizeof(uint64_t));
-  if ((param->uint64_listA == NULL) || (param->uint64_listB == NULL)) {
-    fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
-  }
-  param->uint64_listA[0] = value;
-  param->uint64_listB[0] = value;
-  param->listA_count = 1;
-  param->listB_count = 1;
+  param->uint64_listA = NULL;
+  param->uint64_listB = NULL;
+  param->listA_count = 0;
+  param->listB_count = 0;
 }
 
 static void setParamDefaultValueAddrList(PathParam *param, const char *name, size_t value) {
   strcpy(param->name, name);
   param->type = PARAM_TYPE_ADDR_LIST;
-  param->addr_listA = (size_t *)malloc(sizeof(size_t));
-  param->addr_listB = (size_t *)malloc(sizeof(size_t));
-  if ((param->addr_listA == NULL) || (param->addr_listB == NULL)) {
-    fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
-  }
-  param->addr_listA[0] = value;
-  param->addr_listB[0] = value;
+  param->addr_listA = NULL;
+  param->addr_listB = NULL;
+  param->listA_count = 0;
+  param->listB_count = 0;
 }
 
 static void updateParam(TakyonGraph *graph, PathParam *param, char *value, int line_count) {
   static char valueA[MAX_VALUE_BYTES];
   static char valueB[MAX_VALUE_BYTES];
 
-  // Verify one one comma
+  // Verify only one comma
   int comma_count = 0;
   for (int i=0; i<strlen(value); i++) {
     if (value[i] == ',') comma_count++;
@@ -1120,13 +1118,15 @@ static void updateParam(TakyonGraph *graph, PathParam *param, char *value, int l
     param->completetionA = getCompletionMethod(valueA, line_count);
     param->completetionB = getCompletionMethod(valueB, line_count);
   } else if (param->type == PARAM_TYPE_UINT64_LIST) {
-    free(param->uint64_listA);
-    free(param->uint64_listB);
+    // Since values are allowed to be specified more than once, onlt the last one take precedence, so free up any previous values
+    if (param->uint64_listA != NULL) free(param->uint64_listA);
+    if (param->uint64_listB != NULL) free(param->uint64_listB);
     getUInt64List(valueA, &param->listA_count, &param->uint64_listA, line_count);
     getUInt64List(valueB, &param->listB_count, &param->uint64_listB, line_count);
   } else if (param->type == PARAM_TYPE_ADDR_LIST) {
-    free(param->addr_listA);
-    free(param->addr_listB);
+    // Since values are allowed to be specified more than once, onlt the last one take precedence, so free up any previous values
+    if (param->addr_listA != NULL) free(param->addr_listA);
+    if (param->addr_listB != NULL) free(param->addr_listB);
     getAddrList(graph, valueA, &param->listA_count, &param->addr_listA, line_count);
     getAddrList(graph, valueB, &param->listB_count, &param->addr_listB, line_count);
   }
@@ -1165,22 +1165,30 @@ static void copyParams(PathParam *dest_params, PathParam *src_params, int num_pa
     } else if (dest_params[i].type == PARAM_TYPE_UINT64_LIST) {
       dest_params[i].listA_count = src_params[i].listA_count;
       dest_params[i].listB_count = src_params[i].listB_count;
-      dest_params[i].uint64_listA = (uint64_t *)malloc(dest_params[i].listA_count * sizeof(uint64_t));
-      dest_params[i].uint64_listB = (uint64_t *)malloc(dest_params[i].listB_count * sizeof(uint64_t));
-      if ((dest_params[i].uint64_listA == NULL) || (dest_params[i].uint64_listB == NULL)) {
-        fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
-        exit(EXIT_FAILURE);
+      dest_params[i].uint64_listA = NULL;
+      dest_params[i].uint64_listB = NULL;
+      if (dest_params[i].listA_count > 0) {
+        dest_params[i].uint64_listA = (uint64_t *)malloc(dest_params[i].listA_count * sizeof(uint64_t));
+        if (dest_params[i].uint64_listA == NULL) { fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__); exit(EXIT_FAILURE); }
+      }
+      if (dest_params[i].listB_count > 0) {
+        dest_params[i].uint64_listB = (uint64_t *)malloc(dest_params[i].listB_count * sizeof(uint64_t));
+        if (dest_params[i].uint64_listB == NULL) { fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__); exit(EXIT_FAILURE); }
       }
       for (int j=0; j<dest_params[i].listA_count; j++) dest_params[i].uint64_listA[j] = src_params[i].uint64_listA[j];
       for (int j=0; j<dest_params[i].listB_count; j++) dest_params[i].uint64_listB[j] = src_params[i].uint64_listB[j];
     } else if (dest_params[i].type == PARAM_TYPE_ADDR_LIST) {
       dest_params[i].listA_count = src_params[i].listA_count;
       dest_params[i].listB_count = src_params[i].listB_count;
-      dest_params[i].addr_listA = (size_t *)malloc(dest_params[i].listA_count * sizeof(size_t));
-      dest_params[i].addr_listB = (size_t *)malloc(dest_params[i].listB_count * sizeof(size_t));
-      if ((dest_params[i].addr_listA == NULL) || (dest_params[i].addr_listB == NULL)) {
-        fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
-        exit(EXIT_FAILURE);
+      dest_params[i].addr_listA = NULL;
+      dest_params[i].addr_listB = NULL;
+      if (dest_params[i].listA_count > 0) {
+        dest_params[i].addr_listA = (size_t *)malloc(dest_params[i].listA_count * sizeof(size_t));
+        if (dest_params[i].addr_listA == NULL) { fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__); exit(EXIT_FAILURE); }
+      }
+      if (dest_params[i].listB_count > 0) {
+        dest_params[i].addr_listB = (size_t *)malloc(dest_params[i].listB_count * sizeof(size_t));
+        if (dest_params[i].addr_listB == NULL) { fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__); exit(EXIT_FAILURE); }
       }
       for (int j=0; j<dest_params[i].listA_count; j++) dest_params[i].addr_listA[j] = src_params[i].addr_listA[j];
       for (int j=0; j<dest_params[i].listB_count; j++) dest_params[i].addr_listB[j] = src_params[i].addr_listB[j];
@@ -1189,6 +1197,8 @@ static void copyParams(PathParam *dest_params, PathParam *src_params, int num_pa
 }
 
 static uint64_t *copyUInt64List(uint64_t *list, int count) {
+  if (count == 0) return NULL;
+
   uint64_t *new_list = (uint64_t *)malloc(count * sizeof(uint64_t));
   if (new_list == NULL) {
     fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
@@ -1201,6 +1211,8 @@ static uint64_t *copyUInt64List(uint64_t *list, int count) {
 }
 
 static size_t *copyAddrList(size_t *list, int count) {
+  if (count == 0) return NULL;
+
   size_t *new_list = (size_t *)malloc(count * sizeof(size_t));
   if (new_list == NULL) {
     fprintf(stderr, "%s(): Out of memory\n", __FUNCTION__);
@@ -1216,11 +1228,11 @@ static void freeParamLists(PathParam *path_params, int num_params) {
   for (int i=0; i<num_params; i++) {
     PathParam *param = &path_params[i];
     if ((strcmp(param->name, "SenderMaxBytesList:") == 0) || (strcmp(param->name, "RecverMaxBytesList:") == 0)) {
-      free(param->uint64_listA);
-      free(param->uint64_listB);
+      if (param->uint64_listA != NULL) free(param->uint64_listA);
+      if (param->uint64_listB != NULL) free(param->uint64_listB);
     } else if ((strcmp(param->name, "SenderAddrList:") == 0) || (strcmp(param->name, "RecverAddrList:") == 0)) {
-      free(param->addr_listA);
-      free(param->addr_listB);
+      if (param->addr_listA != NULL) free(param->addr_listA);
+      if (param->addr_listB != NULL) free(param->addr_listB);
     }
   }
 }

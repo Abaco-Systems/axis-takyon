@@ -11,6 +11,10 @@
 
 #include "takyon_private.h"
 
+// DANGEROUS: If USE_AT_EXIT_METHOD is not used, this alternative is not thread safe, so all path's should be created/destroyed from the same thread to avoid race conditions
+/*+ don't do this if VxWorks */
+#define USE_AT_EXIT_METHOD  // This is a cleaner way IMHO to handle cleaning up resources, but only works if the OS supports atexit().
+
 #define TAKYON_MULTICAST_IP    "127.0.0.1"    // A local interface that is multicast capable (for both sending and receiving)
 #define TAKYON_MULTICAST_PORT  6736           // Uses phone digits to spell "Open"
 #define TAKYON_MULTICAST_GROUP "229.82.29.66" // Uses phone digits to spell "Takyon" i.e. 229.TA.KY.ON
@@ -47,9 +51,17 @@ typedef struct {
 } EphemeralPortMessage;
 #pragma pack(pop)
 
+#ifdef USE_AT_EXIT_METHOD
 static pthread_once_t L_once_control = PTHREAD_ONCE_INIT;
 static pthread_mutex_t *L_mutex = NULL;
 static pthread_cond_t *L_cond = NULL;
+#else
+static uint32_t L_usage_counter = 0;
+static pthread_mutex_t L_mutex_private = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t L_cond_private = PTHREAD_COND_INITIALIZER;
+#define L_mutex (&L_mutex_private)
+#define L_cond (&L_cond_private)
+#endif
 static EphemeralPortManagerItem *L_manager_items = NULL;
 static uint32_t L_num_manager_items = 0;
 static char L_error_message[MAX_ERROR_MESSAGE_CHARS]; // This manager is a global resource not always connected to a path, so need a separate error_message buffer
@@ -258,7 +270,7 @@ static void *ephemeralPortMonitoringThread(void *user_arg) {
   return NULL;
 }
 
-static void ephemeralPortManagerFinalize(void) {
+static void ephemeralPortManagerFinalizePrivate(void) {
   if (L_verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
     printf("Finalizing the ephemeral port manager\n");
   }
@@ -297,7 +309,9 @@ static void ephemeralPortManagerFinalize(void) {
   // Free the manager items
   free(L_manager_items);
   L_manager_items = NULL;
+  L_num_manager_items = 0;
 
+#ifdef USE_AT_EXIT_METHOD
   // Free the mutex
   pthread_mutex_destroy(L_mutex);
   free(L_mutex);
@@ -307,8 +321,8 @@ static void ephemeralPortManagerFinalize(void) {
   pthread_cond_destroy(L_cond);
   free(L_cond);
   L_cond = NULL;
+#endif
 
-  L_num_manager_items = 0;
   if (L_verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
     printf("Done finalizing the ephemeral port manager\n");
   }
@@ -370,6 +384,7 @@ static void ephemeralPortManagerInitOnce(void) {
     exit(EXIT_FAILURE);
   }
 
+#ifdef USE_AT_EXIT_METHOD
   L_mutex = calloc(1, sizeof(pthread_mutex_t));
   if (L_mutex == NULL) {
     fprintf(stderr, "Out of memory\n");
@@ -383,6 +398,7 @@ static void ephemeralPortManagerInitOnce(void) {
     exit(EXIT_FAILURE);
   }
   pthread_cond_init(L_cond, NULL);
+#endif
 
   // Create the multicast sender socket
   L_error_message[0] = '\0';
@@ -416,26 +432,59 @@ static void ephemeralPortManagerInitOnce(void) {
     exit(EXIT_FAILURE);
   }
 
+#ifdef USE_AT_EXIT_METHOD
   // This will get called if the app calls exit() or if main does a normal return.
-  if (atexit(ephemeralPortManagerFinalize) == -1) {
+  if (atexit(ephemeralPortManagerFinalizePrivate) == -1) {
     fprintf(stderr, "Failed to setup atexit() in the ephemeral port manager initializer\n");
     exit(EXIT_FAILURE);
   }
+#endif
 }
 
-static void ephemeralPortManagerInit(uint64_t verbosity) {
+void ephemeralPortManagerInit(uint64_t verbosity) {
   L_verbosity = verbosity;
+#ifdef USE_AT_EXIT_METHOD
   // Call this to make sure the ephemeral port manager is ready to coordinate: This can be called multiple times, but it's guaranteed to atomically run only the first time called.
   if (pthread_once(&L_once_control, ephemeralPortManagerInitOnce) != 0) {
     fprintf(stderr, "Failed to start the ephemeral port manager\n");
     exit(EXIT_FAILURE);
   }
+#else
+  // Increase usage counter
+  pthread_mutex_lock(L_mutex);
+  if (L_usage_counter == 0) {
+    ephemeralPortManagerInitOnce();
+  }
+  L_usage_counter++;
+  pthread_mutex_unlock(L_mutex);
+#endif
+}
+
+void ephemeralPortManagerFinalize() {
+#ifdef USE_AT_EXIT_METHOD
+  // Nothing to do
+#else
+  // Decrease usage counter
+  pthread_mutex_lock(L_mutex);
+  if (L_usage_counter == 0) {
+    fprintf(stderr, "ephemeralPortManagerFinalize() was called more times than ephemeralPortManagerInit(). This should never happen.\n");
+    pthread_mutex_unlock(L_mutex);
+    exit(EXIT_FAILURE);
+  }
+  L_usage_counter--;
+  bool need_to_finalize = false;
+  if (L_usage_counter == 0) {
+    need_to_finalize = true;
+  }
+  pthread_mutex_unlock(L_mutex);
+  if (need_to_finalize) {
+    // DANGEROUS: This is not thread safe, so all path's should be created/destroyed from the same thread to avoid race conditions
+    ephemeralPortManagerFinalizePrivate();
+  }
+#endif
 }
 
 uint16_t ephemeralPortManagerGet(const char *interconnect_name, uint32_t path_id, int64_t timeout_ns, bool *timed_out_ret, uint64_t verbosity, char *error_message) {
-  // Call this to make sure the ephemeral port number manager is ready to coordinate: This can be called multiple times, but it's guaranteed to atomically run only the first time called.
-  ephemeralPortManagerInit(verbosity);
-
   if (L_verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
     printf("Ephemeral port manager: asking for port for (interconnect='%s', path_id=%u)\n", interconnect_name, path_id);
   }
@@ -535,9 +584,6 @@ void ephemeralPortManagerRemove(const char *interconnect_name, uint32_t path_id,
 }
 
 void ephemeralPortManagerSet(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number, uint64_t verbosity) {
-  // Call this to make sure the ephemeral port number manager is ready to coordinate: This can be called multiple times, but it's guaranteed to atomically run only the first time called.
-  ephemeralPortManagerInit(verbosity);
-
   pthread_mutex_lock(L_mutex);
 
   // IMPORTANT: Need to guarantee that it gets into this local database in case the multicast message gets dropped

@@ -9,20 +9,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "takyon_extensions.h"
 #include "scatter_gather.h"
 
 static int L_ncycles = 100;
 static TakyonGraph *L_graph = NULL;
 
 static void *thread_entry_function(void *user_data) {
-  TakyonThread *thread_info = (TakyonThread *)user_data;
-  TakyonGroup *group = takyonGetGroup(L_graph, thread_info->group_id);
-
   // Create Takyon paths
+  TakyonThread *thread_info = (TakyonThread *)user_data;
   takyonCreateGroupPaths(L_graph, thread_info->group_id);
 
-  // Run correct thread
+  // Run correct threads
+  TakyonGroup *group = takyonGetGroup(L_graph, thread_info->group_id);
   if (strcmp(group->name, "parent")==0) {
     parentTask(L_graph, thread_info->group_id, L_ncycles);
   } else if (strcmp(group->name, "child")==0) {

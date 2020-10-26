@@ -174,6 +174,8 @@ extern bool socketRecvUInt64(TakyonSocket socket_fd, uint64_t *value_ret, int64_
 extern void socketClose(TakyonSocket socket_fd);
 
 // Ephemeral port manager (let OS find unused port numbers to be used by IP connections: sockets, RDMA)
+extern void ephemeralPortManagerInit(uint64_t verbosity);
+extern void ephemeralPortManagerFinalize();
 extern void ephemeralPortManagerSet(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number, uint64_t verbosity);
 extern uint16_t ephemeralPortManagerGet(const char *interconnect_name, uint32_t path_id, int64_t timeout_ns, bool *timed_out_ret, uint64_t verbosity, char *error_message);
 extern void ephemeralPortManagerRemove(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number);
@@ -185,6 +187,7 @@ extern void pipeDestroy(int read_pipe_fd, int write_pipe_fd);
 
 // Inter-thread manager (organizes communications between threads in the same process)
 extern bool interThreadManagerInit();
+extern void interThreadManagerFinalize();
 extern InterThreadManagerItem *interThreadManagerConnect(uint32_t interconnect_id, uint32_t path_id, TakyonPath *path);
 extern void interThreadManagerMarkConnectionAsBad(InterThreadManagerItem *item);
 extern bool interThreadManagerDisconnect(TakyonPath *path, InterThreadManagerItem *item);

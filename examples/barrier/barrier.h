@@ -12,6 +12,8 @@
 #ifndef _barrier_h_
 #define _barrier_h_
 
+#include "takyon_extensions.h"
+
 void barrierTask(TakyonGraph *graph, int group_id, int ncycles);
 
 #endif

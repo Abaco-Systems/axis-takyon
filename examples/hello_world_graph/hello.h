@@ -12,6 +12,8 @@
 #ifndef _hello_h_
 #define _hello_h_
 
+#include "takyon_extensions.h"
+
 void helloTask(TakyonGraph *graph, int group_id);
 
 #endif

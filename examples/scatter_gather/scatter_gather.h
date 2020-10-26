@@ -12,6 +12,8 @@
 #ifndef _scatter_gather_h_
 #define _scatter_gather_h_
 
+#include "takyon_extensions.h"
+
 void parentTask(TakyonGraph *graph, int group_id, int ncycles);
 void childTask(TakyonGraph *graph, int group_id, int ncycles);
 

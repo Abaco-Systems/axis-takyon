@@ -9,7 +9,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "takyon_extensions.h"
 #include "reduce.h"
 
 static void vector_max(uint64_t nelements, void *a, void *b) {

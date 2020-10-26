@@ -83,6 +83,10 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     fprintf(stderr, "ERROR in %s(): attributes->nbufs_BtoA can not be negative\n", __FUNCTION__);
     abort();
   }
+  if (attributes->nbufs_AtoB == 0 && attributes->nbufs_BtoA == 0) {
+    fprintf(stderr, "ERROR in %s(): One of attributes->nbufs_AtoB or attributes->nbufs_BtoA must have at least 1 buffer\n", __FUNCTION__);
+    abort();
+  }
   int nbufs_sender = attributes->is_endpointA ? attributes->nbufs_AtoB : attributes->nbufs_BtoA;
   int nbufs_recver = attributes->is_endpointA ? attributes->nbufs_BtoA : attributes->nbufs_AtoB;
   if (nbufs_sender > 0) {

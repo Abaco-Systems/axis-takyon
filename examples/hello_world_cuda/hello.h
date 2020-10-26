@@ -13,6 +13,7 @@
 #define _hello_h_
 
 #include <stdbool.h>
+#include "takyon_extensions.h"
 
 extern bool G_interconnect_is_shared_pointer;
 

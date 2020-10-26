@@ -13,9 +13,20 @@
 
 //#define DEBUG_MESSAGE
 
+/*+ don't do this if VxWorks */
+#define USE_AT_EXIT_METHOD  // This is a cleaner way IMHO to handle cleaning up resources, but only works if the OS supports atexit().
+
+#ifdef USE_AT_EXIT_METHOD
 static pthread_once_t L_once_control = PTHREAD_ONCE_INIT;
 static pthread_mutex_t *L_master_mutex = NULL;
 static pthread_cond_t *L_master_cond = NULL;
+#else
+static uint32_t L_usage_counter = 0;
+static pthread_mutex_t L_master_mutex_private = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t L_master_cond_private = PTHREAD_COND_INITIALIZER;
+#define L_master_mutex (&L_master_mutex_private)
+#define L_master_cond (&L_master_cond_private)
+#endif
 static InterThreadManagerItem **L_manager_items = NULL;
 static unsigned int L_num_manager_items = 0;
 static unsigned int L_max_manager_items = 0;
@@ -28,6 +39,7 @@ static void threadManagerFinalize(void) {
     free(L_manager_items);
     L_manager_items = NULL;
   }
+#ifdef USE_AT_EXIT_METHOD
   if (L_master_mutex != NULL) {
     pthread_mutex_destroy(L_master_mutex);
     free(L_master_mutex);
@@ -38,6 +50,7 @@ static void threadManagerFinalize(void) {
     free(L_master_cond);
     L_master_cond = NULL;
   }
+#endif
   L_num_manager_items = 0;
   L_max_manager_items = 0;
 #ifdef DEBUG_MESSAGE
@@ -45,12 +58,13 @@ static void threadManagerFinalize(void) {
 #endif
 }
 
+#ifdef USE_AT_EXIT_METHOD
 static void threadManagerInitOnce(void) {
 #ifdef DEBUG_MESSAGE
   printf("Initializing the inter thread manager\n");
 #endif
   L_max_manager_items = 1;
-  L_manager_items = calloc(L_max_manager_items, sizeof(InterThreadManagerItem *));
+  L_manager_items = calloc(L_max_manager_items, L_max_manager_items*sizeof(InterThreadManagerItem *));
 
   L_master_mutex = calloc(1, sizeof(pthread_mutex_t));
   if (L_master_mutex == NULL) {
@@ -75,25 +89,60 @@ static void threadManagerInitOnce(void) {
   printf("Done initializing the inter thread manager\n");
 #endif
 }
+#endif
 
 bool interThreadManagerInit() {
+#ifdef USE_AT_EXIT_METHOD
   // Call this to make sure the inter thread manager is ready to coordinate: This can be called multiple times, but it's guaranteed to atomically run only the first time called.
   if (pthread_once(&L_once_control, threadManagerInitOnce) != 0) {
     fprintf(stderr, "Failed to start the inter thread manager\n");
     return false;
   }
+#else
+  // Increase usage counter
+  pthread_mutex_lock(L_master_mutex);
+  L_usage_counter++;
+  pthread_mutex_unlock(L_master_mutex);
+#endif
   return true;
 }
 
+void interThreadManagerFinalize() {
+#ifdef USE_AT_EXIT_METHOD
+  // Nothing to do
+#else
+  // Decrease usage counter
+  pthread_mutex_lock(L_master_mutex);
+  if (L_usage_counter == 0) {
+    fprintf(stderr, "interThreadManagerFinalize() was called more times than interThreadManagerInit(). This should never happen.\n");
+    pthread_mutex_unlock(L_master_mutex);
+    exit(EXIT_FAILURE);
+  }
+  L_usage_counter--;
+  if (L_usage_counter == 0) {
+    threadManagerFinalize();
+  }
+  pthread_mutex_unlock(L_master_mutex);
+#endif
+}
+
 static void threadManagerAddItem(InterThreadManagerItem *item) {
+  // NOTE: this function should only be called when the global mutex is locked
 #ifdef DEBUG_MESSAGE
   printf("Inter Thread Manager: adding item with interconnect id %d and id %d\n", item->interconnect_id, item->path_id);
 #endif
 
   if (L_num_manager_items == L_max_manager_items) {
-    // List is full so double the size of the list
-    L_max_manager_items *= 2;
-    L_manager_items = realloc(L_manager_items, L_max_manager_items*sizeof(InterThreadManagerItem *));
+    // Increase the size of the list
+    if (L_max_manager_items == 0) {
+      // First time the list has been allocated
+      L_max_manager_items = 1;
+      L_manager_items = calloc(L_max_manager_items, L_max_manager_items*sizeof(InterThreadManagerItem *));
+    } else {
+      // List is full so double the size of the list
+      L_max_manager_items *= 2;
+      L_manager_items = realloc(L_manager_items, L_max_manager_items*sizeof(InterThreadManagerItem *));
+    }
     if (L_manager_items == NULL) {
       fprintf(stderr, "Out of memory\n");
       exit(EXIT_FAILURE);
@@ -106,6 +155,7 @@ static void threadManagerAddItem(InterThreadManagerItem *item) {
 }
 
 static InterThreadManagerItem *getUnconnectedManagerItem(uint32_t interconnect_id, uint32_t path_id) {
+  // NOTE: this function should only be called when the global mutex is locked
 #ifdef DEBUG_MESSAGE
   printf("Inter Thread Manager: find item with interconnect id %d and id %d\n", interconnect_id, path_id);
 #endif
@@ -118,6 +168,7 @@ static InterThreadManagerItem *getUnconnectedManagerItem(uint32_t interconnect_i
 }
 
 static void threadManagerRemoveItem(InterThreadManagerItem *item) {
+  // NOTE: this function should only be called when the global mutex is locked
 #ifdef DEBUG_MESSAGE
   printf("Inter Thread Manager: remove item with interconnect id %d and id %d\n", item->interconnect_id, item->path_id);
 #endif

@@ -9,7 +9,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "takyon_extensions.h"
 #include "pipeline.h"
 
 void pipelineTask(TakyonGraph *graph, int group_id, int ncycles) {

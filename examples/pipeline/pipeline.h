@@ -12,6 +12,8 @@
 #ifndef _pipeline_h_
 #define _pipeline_h_
 
+#include "takyon_extensions.h"
+
 void pipelineTask(TakyonGraph *graph, int group_id, int ncycles);
 
 #endif
