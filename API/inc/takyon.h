@@ -12,63 +12,14 @@
 #ifndef _takyon_h_
 #define _takyon_h_
 
-#define TAKYON_VERSION_MAJOR 1
-#define TAKYON_VERSION_MINOR 0
-#define TAKYON_VERSION_PATCH 0
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
-
-// All Takyon connections use one or two endpoints. Each endpoint must specify the interconnect to be used.
-// The following are common interconnect specifications intended to be supported by most implementations:
-//
-// Endpoint A                                  INTER-THREAD PATHS                   Endpoint B
-// -----------------------------------         -------------------                  ----------------------------------------------
-// InterThreadMemcpy -ID=<ID>                                                       InterThreadMemcpy -ID=<ID>
-// InterThreadPointer -ID=<ID>                                                      InterThreadPointer -ID=<ID>
-//
-// Endpoint A                                  INTER-PROCESS PATHS                  Endpoint B
-// -----------------------------------         --------------------                 ----------------------------------------------
-// InterProcessMemcpy -ID=<ID>                                                      InterProcessMemcpy -ID=<ID>
-// InterProcessPointer -ID=<ID>                                                     InterProcessPointer -ID=<ID>
-//     Both of the above interconnects can use the optional paramter:
-//        -recverAddrMmapNamePrefix=<name>:  For any receive side buffers that are application allocated, then the name the
-//                                           application used to allocated shared memory must be of the format: "<name><buffer_index>"
-// InterProcessSocket -ID=<ID>                                                      InterProcessSocket -ID=<ID>
-//
-// Endpoint (A or B)                           INTER-PROCESSOR PATHS                Endpoint (A or B: ooposite of remote endpoint)
-// -----------------------------------         ---------------------                ----------------------------------------------
-// Socket -client -IP=<remoteIP> -port=<port>                                       Socket -server -IP=<localIP or 'Any'> -port=<port> [-reuse]
-// Socket -client -IP=<remoteIP> -ID=<id>                                           Socket -server -IP=<localIP or 'Any'> -ID=<id>
-//     The above finds ephemeral port numbers via a multicast coordination between Takyon processes
-//     The following Takyon multicast defaults can be overriden by environment variables:
-//       TAKYON_MULTICAST_IP    "127.0.0.1"       A local interface that is multicast capable (for both sending and receiving)
-//       TAKYON_MULTICAST_PORT   6736             Uses phone digits to spell "Open"
-//       TAKYON_MULTICAST_GROUP "229.82.29.66"    Uses phone digits to spell "Takyon" i.e. 229.TA.KY.ON
-//       TAKYON_MULTICAST_TTL    1                Restricts multicasting to same subnet
-// OneSidedSocket -client -IP=<remoteIP> -port=<port>                               ... some other server side or Takyon TCP socket ...
-// ... some other client side or Takyon TCP socket ...                              OneSidedSocket -server -IP=<localIP or 'Any'> -port=<port> [-reuse]
-//
-// Endpoint A                                  INTER-PROCESSOR UNICAST              Endpoint B
-// -----------------------------------         -----------------------              ----------------------------------------------
-// UnicastSendSocket -IP=<remoteIP> -port=<port>                                    ... some 3rd party or Takyon unicast receive ...
-// ... some 3rd party or Takyon unicast send ...                                    UnicastRecvSocket -IP=<localIP or 'Any'> -port=<port> [-reuse]
-//
-// Endpoint A                                  INTER-PROCESSOR MULTICAST                 Endpoint B
-// -----------------------------------         -------------------------                 ----------------------------------------------
-// MulticastSendSocket -IP=<localIP> -group=<gIP> -port=<port> [-noLoopback] [-TTL=<n>]  ... some 3rd party or Takyon multicast receive ...
-// ... some 3rd party or Takyon multicast send ...                                       MulticastRecvSocket -IP=<localIP> -group=<gIP> -port=<port> [-reuse]
-//     Valid group addresses: 224.0.0.0 through 239.255.255.255, but some are reserved
-//     Supported TTL values: 0=host, 1=subnet (default), 32=site, 64=region, 128=continent, 255=everywhere
-
-// For interconnects that can support CUDA memory buffers, the following are optional arguments:
-//          -srcCudaDeviceId=<id>    For Takyon managed source buffers, allocate on CUDA device <id>
-//          -destCudaDeviceId=<id>   For Takyon managed destination buffers, allocate on CUDA device <id>
-
-// All Takyon allocated data buffers are suitably aligned for any kind of variable. This is intended to provide better processing performance for things like vector math libraries.
-
+// Takyon version
+#define TAKYON_VERSION_MAJOR 1
+#define TAKYON_VERSION_MINOR 0
+#define TAKYON_VERSION_PATCH 0
 
 // Takyon constants
 #define TAKYON_MAX_INTERCONNECT_CHARS 1000  // Max size of text string to define a path's interconnect
@@ -126,11 +77,11 @@ extern "C"
 {
 #endif
 
-extern TakyonPath *takyonCreate(TakyonPathAttributes *attributes);
+extern TakyonPath *takyonCreate(TakyonPathAttributes *attributes);   // If this returns NULL, call free(attributes.error_message) if not NULL, after reading the message
 extern bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret);
 extern bool takyonIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret);
 extern bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret);
-extern char *takyonDestroy(TakyonPath **path_ret); // If this returns non NULL, it contains the error message to be printed or stored, and it needs to be freed by the application
+extern char *takyonDestroy(TakyonPath **path_ret);   // If this returns non NULL, it contains the error message to be printed or stored, and it needs to be freed by the application
 
 #ifdef __cplusplus
 }
