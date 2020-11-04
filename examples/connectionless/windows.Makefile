@@ -13,6 +13,11 @@
 TARGET       = connectionless.exe
 C_OBJS       = connectionless.obj takyon_time.obj takyon_attributes.obj
 
+# Verify TAKYON_LIBS is set
+!IF "$(TAKYON_LIBS)" == ""
+!  ERROR 'The environment variable TAKYON_LIBS is not defined!'
+!ENDIF
+
 # Check for CUDA integration
 !IF "$(WITH_CUDA)" == "Yes"
 !  IF "$(CUDA_HOME)" == ""
@@ -35,7 +40,7 @@ CFLAGS       = -O2 -MD -W3 -WX -nologo -Zm200 -Zc:wchar_t- -D_CRT_SECURE_NO_WARN
 LDFLAGS      = /NOLOGO /INCREMENTAL:NO /MANIFEST:embed /SUBSYSTEM:console
 PTHREADS_LIB = c:/pthreads4w/install/lib/libpthreadVC3.lib /NODEFAULTLIB:LIBCMT.LIB
 #PTHREADS_LIB = c:/pthreads4w/install/lib/libpthreadVC3d.lib /NODEFAULTLIB:LIBCMT.LIB
-LIBS         = ../../API/builds/windows/TakyonStatic.lib Ws2_32.lib $(CUDA_LIB) $(PTHREADS_LIB)
+LIBS         = $(TAKYON_LIBS)/TakyonStatic.lib Ws2_32.lib $(CUDA_LIB) $(PTHREADS_LIB)
 
 .SUFFIXES: .c
 

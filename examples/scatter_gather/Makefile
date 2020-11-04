@@ -19,20 +19,24 @@ LDFLAGS        := $(COMMON_FLAGS)
 C_OBJS         := main.o scatter_gather.o takyon_graph.o takyon_attributes.o takyon_collective.o takyon_mmap.o
 TARGET         := $(APP_NAME)
 
+ifeq ($(TAKYON_LIBS),)
+    $(error The environment variable TAKYON_LIBS is undefined)
+endif
+
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-    PRJ_LIBS := -rdynamic -Wl,--whole-archive -L../../API/builds/linux -lTakyon -Wl,--no-whole-archive -ldl -lrt -lm
+    PRJ_LIBS := -rdynamic -Wl,--whole-archive -L$(TAKYON_LIBS) -lTakyon -Wl,--no-whole-archive -ldl -lrt -lm
     ifeq ($(USE_STATIC_LIB),Yes)
-        PRJ_LIBS := -L../../API/builds/linux -lTakyonStatic -lrt -lm
+        PRJ_LIBS := -L$(TAKYON_LIBS) -lTakyonStatic -lrt -lm
     endif
     ifeq ($(WITH_RDMA),Yes)
         PRJ_LIBS += -libverbs -lrdmacm -lm
     endif
 endif
 ifeq ($(UNAME_S),Darwin)
-    PRJ_LIBS := -rdynamic -all_load -L../../API/builds/mac -lTakyon
+    PRJ_LIBS := -rdynamic -all_load -L$(TAKYON_LIBS) -lTakyon
     ifeq ($(USE_STATIC_LIB),Yes)
-        PRJ_LIBS := -L../../API/builds/mac -lTakyonStatic
+        PRJ_LIBS := -L$(TAKYON_LIBS) -lTakyonStatic
     endif
 endif
 

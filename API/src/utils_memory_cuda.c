@@ -20,7 +20,7 @@ bool isCudaAddress(void *addr, bool *is_cuda_addr_ret, char *error_message) {
   struct cudaPointerAttributes attributes;
   cudaError_t cuda_status = cudaPointerGetAttributes(&attributes, addr);
   if (cuda_status != cudaSuccess) {
-    TAKYON_RECORD_ERROR(error_message, "Failed to determine of memory addr is CUDA or CPU: %s\n", cudaGetErrorString(cuda_status));
+    TAKYON_RECORD_ERROR(error_message, "Failed to determine if memory addr is CUDA or CPU, operation may not be supported on this platform: %s\n", cudaGetErrorString(cuda_status));
     return false;
   }
   

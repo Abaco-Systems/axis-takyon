@@ -75,7 +75,7 @@ void helloTask(TakyonGraph *graph, int group_id) {
           cudaError_t cuda_status = cudaMemcpy(src_addr, expected_message, msg_bytes, cudaMemcpyHostToDevice);
           if (cuda_status != cudaSuccess) { fprintf(stderr, "cudaMemcpy(send_data) Failed\n"); exit(EXIT_FAILURE); }
         } else {
-          strncpy(src_addr, expected_message, msg_bytes);
+          memcpy(src_addr, expected_message, msg_bytes);
         }
         // Send the message
         if (graph->process_count > 1) printf("Endpoint 'A' sending message: \"%s\"\n", expected_message);
@@ -93,7 +93,7 @@ void helloTask(TakyonGraph *graph, int group_id) {
           cudaError_t cuda_status = cudaMemcpy(received_message, dest_addr, msg_bytes, cudaMemcpyDeviceToHost);
           if (cuda_status != cudaSuccess) { fprintf(stderr, "cudaMemcpy(recv_data) Failed\n"); exit(EXIT_FAILURE); }
         } else {
-          strncpy(received_message, dest_addr, msg_bytes);
+          memcpy(received_message, dest_addr, msg_bytes);
         }
         // Verify the correct message arrived
         if (strcmp(received_message, expected_message) != 0) { fprintf(stderr, "Failed to get expected message on %s buffer %d:\nmessage = '%s'\nexpected='%s'\n", endpointB_is_cuda ? "CUDA" : "CPU", buffer_index, received_message, expected_message); exit(EXIT_FAILURE); }

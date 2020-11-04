@@ -1353,14 +1353,16 @@ static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char 
       interconnectA[0] = '\0';
       data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
       validateKeyValue("InterconnectA:", data_ptr, keyword, value, line_count);
-      strncpy(interconnectA, value, TAKYON_MAX_INTERCONNECT_CHARS);
+      int value_length = (int)strlen(value);
+      snprintf(interconnectA, TAKYON_MAX_INTERCONNECT_CHARS, "%.*s", value_length, value);
 
       // InterconnectB
       static char interconnectB[TAKYON_MAX_INTERCONNECT_CHARS];
       interconnectB[0] = '\0';
       data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
       validateKeyValue("InterconnectB:", data_ptr, keyword, value, line_count);
-      strncpy(interconnectB, value, TAKYON_MAX_INTERCONNECT_CHARS);
+      value_length = (int)strlen(value);
+      snprintf(interconnectB, TAKYON_MAX_INTERCONNECT_CHARS, "%.*s", value_length, value);
 
       // Get path attributes
       data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);

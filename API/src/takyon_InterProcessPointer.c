@@ -599,7 +599,8 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
           goto cleanup;
         }
         // Record the app allocated mmap name
-        snprintf(buffers->recv_buffer_list[buf_index].local_recver_mmap_name, MAX_MMAP_NAME_CHARS, "%s%d", remote_mmap_prefix, buf_index);
+        int prefix_length = (int)strlen(remote_mmap_prefix);
+        snprintf(buffers->recv_buffer_list[buf_index].local_recver_mmap_name, MAX_MMAP_NAME_CHARS, "%.*s%d", prefix_length, remote_mmap_prefix, buf_index);
       }
     }
   }

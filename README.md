@@ -135,7 +135,7 @@ For all the great details on Takyon, read the following PDFs in Takyon's `docs/`
 Before running any examples, the Takyon core libraries must be built.
 
 ### Linux
-*Tested on Ubuntu 16.04, 18.04 64-bit Intel using gcc, but should work on most other Linux flavors and chip architectures.*
+*Tested on CentOS 8.2, Ubuntu 16.04, 18.04 64-bit Intel using gcc, but should work on most other Linux flavors and chip architectures.*
 ```
 > cd Takyon/API/builds/linux
 > make                  # No CUDA integration
@@ -191,21 +191,22 @@ Takyon.lib                 (single library with all supported inteconnects)
 This is a one-time step before running any of the examples.
 
 ### Linux
-If using **libTakyon.a** with the dynamic libraries, then run the following first:
+To know where the static and dynamic libraries are, then run the following first:
 ```
 > export TAKYON_LIBS="<Takyon_parent_folder>/Takyon/API/builds/linux"
 ```
-If using the static library **libTakyonStatic.a**, then no environment variable is needed.
 
 ### Mac OSX
-If using **libTakyon.a** with the dynamic libraries, then run the following first:
+To know where the static and dynamic libraries are, then run the following first:
 ```
 > export TAKYON_LIBS="<Takyon_parent_folder>/Takyon/API/builds/mac"
 ```
-If using the static library **libTakyonStatic.a**, then no environment variable is needed.
 
 ### Windows
-All features are encapsulated in the static library **Takyon.lib**, so no environment variable is needed.
+To know where the static library is, then run the following first:
+```
+> set TAKYON_LIBS="<Takyon_parent_folder>\Takyon\API\builds\windows"
+```
 
 ## Examples
 The examples are found in `Takyon/examples/`
@@ -224,6 +225,7 @@ Some Key Techniques:
 - **fault_tolerant**: Shows how to recover from failures (via timeouts, cable disconnection, or control-C)
 - **one_sided**: A connected path, but one endpoint is 3rd party; i.e. not a Takyon endpoint
 - **connectionless**: Send or receive datagrams (multicast or unicast). Allows data dropping. Ideal for live streaming.
+- **callbacks**: Shows how to use Takyon communication in a callback model.
 
 Graph Based (more like MPI; data flow is defined in config file to avoid hard coding in the application):
 - **hello_world_graph**: A simple example of how to use the graph file

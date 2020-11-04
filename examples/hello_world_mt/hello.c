@@ -24,7 +24,7 @@ static void *hello_thread(void *user_data) {
   attrs.is_polling                  = false;
   attrs.abort_on_failure            = true;
   attrs.verbosity                   = TAKYON_VERBOSITY_ERRORS;
-  strncpy(attrs.interconnect, interconnect, TAKYON_MAX_INTERCONNECT_CHARS);
+  strncpy(attrs.interconnect, interconnect, TAKYON_MAX_INTERCONNECT_CHARS-1);
   attrs.path_create_timeout         = TAKYON_WAIT_FOREVER;
   attrs.send_start_timeout          = TAKYON_WAIT_FOREVER;
   attrs.send_finish_timeout         = TAKYON_WAIT_FOREVER;

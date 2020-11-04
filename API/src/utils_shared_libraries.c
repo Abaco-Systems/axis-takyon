@@ -86,7 +86,9 @@ bool sharedLibraryLoad(const char *interconnect_module, int is_verbose, char *er
     TAKYON_RECORD_ERROR(error_message, "The environment variable 'TAKYON_LIBS' needs to be set to point to the Takyon shared libraries folder containing %s.\n", library_name);
     return false;
   }
-  snprintf(full_library_path, MAX_FILENAME_CHARS, "%s/%s", folder_name, library_name);
+  int folder_name_length = (int)strlen(folder_name);
+  int library_name_length = (int)strlen(library_name);
+  snprintf(full_library_path, MAX_FILENAME_CHARS, "%.*s/%.*s", folder_name_length, folder_name, library_name_length, library_name);
   if (is_verbose) {
     printf("Using Takyon interconnect library: '%s'\n", full_library_path);
   }

@@ -37,10 +37,12 @@ Build:
 ------
   Mac and Linux:
     Terminal:
+      > export TAKYON_LIBS=<folder>  // e.g. $HOME/Takyon/API/builds/linux
       > make
       > make USE_STATIC_LIB=Yes      // Use static Takyon lib to avoid dynamic Takyon libs
   Windows:
     DOS Shell:
+      > set TAKYON_LIBS=<folder>     // e.g. c:\takyon\API\build\windows
       > nmake -f windows.Makefile
 
 

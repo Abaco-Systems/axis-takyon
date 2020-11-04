@@ -39,7 +39,7 @@ ifeq ($(WITH_RDMA),Yes)
     TAKYON_H_FILES += ../../inc/utils_rdma_verbs.h
 endif
 
-CFLAGS         := -std=gnu99 -Wall -Werror -pthread -I../../inc
+CFLAGS         := -std=gnu99 -Wall -Werror -fPIC -pthread -I../../inc
 #CFLAGS         += -g -O0
 CFLAGS         += -O2
 ifeq ($(WITH_RDMA),Yes)
