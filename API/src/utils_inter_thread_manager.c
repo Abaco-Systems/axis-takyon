@@ -13,8 +13,9 @@
 
 //#define DEBUG_MESSAGE
 
-/*+ don't do this if VxWorks */
+#ifndef VXWORKS_7
 #define USE_AT_EXIT_METHOD  // This is a cleaner way IMHO to handle cleaning up resources, but only works if the OS supports atexit().
+#endif
 
 #ifdef USE_AT_EXIT_METHOD
 static pthread_once_t L_once_control = PTHREAD_ONCE_INIT;

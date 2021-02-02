@@ -66,7 +66,7 @@ static void getArgValues(int argc, char **argv) {
 
 static void fillInTestData(uint8_t *data, uint64_t bytes, int cycle) {
   for (uint64_t i=0; i<bytes; i++) {
-    data[i] = (cycle+i) % 256;
+    data[i] = (uint8_t)((cycle+i) % 256);
   }
 }
 
@@ -75,7 +75,7 @@ static void verifyTestData(uint8_t *data, uint64_t bytes, int cycle, uint64_t by
   if (offset != 0) { printf("ERROR at cycle %d: 'offset' wrong, got %ju but expected 0\n", cycle, offset); exit(0); }
   for (uint64_t i=0; i<bytes; i++) {
     uint8_t got = data[i];
-    uint8_t expected = (cycle+i) % 256;
+    uint8_t expected = (uint8_t)((cycle+i) % 256);
     if (got != expected) {
       printf("ERROR at cycle %d: data[%ju] wrong, got %u but expected %u\n", cycle, i, got, expected);
       exit(0);
@@ -226,6 +226,27 @@ static void *endpointThread(void *user_data) {
   return NULL;
 }
 
+#ifdef VXWORKS_7
+static int performance_run(int argc, char **argv) {
+  if (argc == 1) {
+    printf("Usage: performance(\"<interconnect_spec>\",<number_of_parameters>,\"[options]\")\n");
+    printf("  Options:\n");
+    printf("    -mt                Enable inter-thread communication (default is inter-process)\n");
+    printf("    -endpointA         If not multi threaded, then this process is marked as endpoint A (default is endpoint B)\n");
+    printf("    -lat               Only test latency (default is to test latency and throughput)\n");
+    printf("    -tp                Only test throughput (default is to test latency and throughput)\n");
+    printf("    -poll              Enable polling communication (default is event driven)\n");
+    printf("    -nbufs <N>         Number of buffers. Default is %d\n", L_nbufs);
+    printf("    -min_bytes <N>     Min message size in bytes. Default is %ju\n", L_min_bytes);
+    printf("    -max_bytes <N>     Max message size in bytes. Default is %ju\n", L_max_bytes);
+    printf("    -ncycles <N>       Number of cycles at each byte size to time. Default is %d\n", L_ncycles);
+    printf("    -nprime_cycles <N> Number of cycles at start of each byte size to do before starting timer. Default is %d\n", L_nprime_cycles);
+    printf("    -validate          Validate data being transferred. Default is off\n");
+    printf("  Example:\n");
+    printf("    performance(\"Socket -client -IP=192.168.0.44 -port=12345\",3,\"-endpointA\",\"-ncycles\",\"5\")\n");
+    return 1;
+  }
+#else
 int main(int argc, char **argv) {
   if (argc == 1) {
     printf("Usage: performance <interconnect_spec> [options]\n");
@@ -243,6 +264,9 @@ int main(int argc, char **argv) {
     printf("    -validate          Validate data being transferred. Default is off\n");
     return 1;
   }
+#endif
+
+  // Parse command line args
   getArgValues(argc, argv);
 
   if (L_is_multi_threaded) {
@@ -258,3 +282,31 @@ int main(int argc, char **argv) {
 
   return 0;
 }
+
+#ifdef VXWORKS_7
+#define ARGV_LIST_MAX 20
+int performance(char *interconnect_spec_arg, int count, ...) {
+  char *argv_list[ARGV_LIST_MAX];
+  int arg_count = 0;
+  argv_list[0] = "performance";
+  arg_count++;
+  if (NULL != interconnect_spec_arg) {
+    argv_list[arg_count] = interconnect_spec_arg;
+    arg_count++;
+  }
+  va_list valist;
+  va_start(valist, count);
+  
+  if (count > (ARGV_LIST_MAX-arg_count)) {
+    printf("ERROR: exceeded <number_of_parameters>\n");
+    return (performance_run(1,NULL));
+  }
+  for (int i=0; i<count; i++) {
+    argv_list[arg_count] = va_arg(valist, char*);
+    arg_count++;
+  }
+  va_end(valist);
+
+  return (performance_run(arg_count,argv_list));
+}
+#endif

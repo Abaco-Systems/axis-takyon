@@ -13,6 +13,20 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef VXWORKS_7
+int hello_world_mp(char *interconnect_arg, int param_count, char *endpoint_indentifier) {
+  if ((NULL == interconnect_arg) || (param_count >= 1 && endpoint_indentifier == NULL)) {
+    printf("Usage: hello_world_mp(\"<interconnect_spec>\",<number of parameters>,\"[options]\")\n");
+    printf("  Options:\n");
+    printf("    -endpointA        This process is marked as endpoint A (default is endpoint B)\n");
+    return 1;
+  }
+  int is_endpointA = 0;
+  const char *interconnect = interconnect_arg;
+  if (param_count >= 1) {
+    is_endpointA = (strcmp(endpoint_indentifier, "-endpointA") == 0);
+  }
+#else
 int main(int argc, char **argv) {
   if (argc < 2) {
     printf("Usage: hello <interconnect_spec> [options]\n");
@@ -22,6 +36,7 @@ int main(int argc, char **argv) {
   }
   const char *interconnect = argv[1];
   int is_endpointA = (argc > 2) && (strcmp(argv[2], "-endpointA") == 0);
+#endif
 
   TakyonPathAttributes attrs;
   attrs.is_endpointA                = is_endpointA;

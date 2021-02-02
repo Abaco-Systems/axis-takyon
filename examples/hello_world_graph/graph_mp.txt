@@ -35,9 +35,9 @@ Path: 0
 #  InterconnectB: InterProcessMemcpy -ID=1
 #  InterconnectA: InterProcessSocket -ID=1
 #  InterconnectB: InterProcessSocket -ID=1
-#  InterconnectA: Socket -client -IP=127.0.0.1 -port=12345
-#  InterconnectB: Socket -server -IP=127.0.0.1 -port=12345 -reuse
-  InterconnectA: Socket -client -IP=127.0.0.1 -ID=1
-  InterconnectB: Socket -server -IP=127.0.0.1 -ID=1
+  InterconnectA: Socket -client -IP=127.0.0.1 -port=12345
+  InterconnectB: Socket -server -IP=127.0.0.1 -port=12345 -reuse
+#  InterconnectA: Socket -client -IP=127.0.0.1 -ID=1
+#  InterconnectB: Socket -server -IP=127.0.0.1 -ID=1
 
 Collectives

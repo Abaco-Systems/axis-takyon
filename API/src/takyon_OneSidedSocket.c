@@ -305,17 +305,16 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Get the port number
-  uint32_t temp_port_number = 0;
-  ok = argGetUInt(path->attrs.interconnect, "-port=", &temp_port_number, &found, path->attrs.error_message);
+  uint32_t port_number = 0;
+  ok = argGetUInt(path->attrs.interconnect, "-port=", &port_number, &found, path->attrs.error_message);
   if (!ok || !found) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec missing -port=<value> for TCP socket\n");
     return false;
   }
-  if ((temp_port_number < 1024) || (temp_port_number > 65535)) {
+  if ((port_number < 1024) || (port_number > 65535)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "port numbers need to be between 1024 and 65535\n");
     return false;
   }
-  unsigned short port_number = temp_port_number;
 
   // Allocate private handle
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
@@ -405,12 +404,12 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 
   // Create the socket and connect with remote endpoint
   if (is_client) {
-    if (!socketCreateTcpClient(ip_addr, port_number, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
+    if (!socketCreateTcpClient(ip_addr, (uint16_t)port_number, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create TCP client socket\n");
       goto cleanup;
     }
   } else {
-    if (!socketCreateTcpServer(ip_addr, port_number, allow_reuse, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
+    if (!socketCreateTcpServer(ip_addr, (uint16_t)port_number, allow_reuse, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create TCP server socket\n");
       goto cleanup;
     }

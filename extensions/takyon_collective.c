@@ -267,6 +267,7 @@ void takyonReduceFinalize(TakyonCollectiveReduce *collective) {
 }
 
 TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, int num_src_paths, int num_dest_paths, TakyonPath **src_path_list, TakyonPath **dest_path_list) {
+  // Record the source and dest paths in this group instance
   if (npaths <= 0) {
     fprintf(stderr, "%s(): npaths must be greater than zero\n", __FUNCTION__);
     exit(EXIT_FAILURE);
@@ -295,6 +296,8 @@ TakyonCollectiveOne2One *takyonOne2OneInit(int npaths, int num_src_paths, int nu
     exit(EXIT_FAILURE);
   }
   collective->npaths = npaths;
+  collective->num_src_paths = num_src_paths;
+  collective->num_dest_paths = num_dest_paths;
   for (int i=0; i<num_src_paths; i++) {
     collective->src_path_list[i] = src_path_list[i];
   }

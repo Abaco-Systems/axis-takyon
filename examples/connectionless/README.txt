@@ -1,6 +1,6 @@
 Description:
 ------------
-  Shows how to use Takyon with an unconneted communication path. This allows for
+  Shows how to use Takyon with an unconnected communication path. This allows for
   unreliable transfers; i.e. messages may be dropped or received out of order.
   This is ideal for data transfers where data integrity is not critical, e.g.
   live audio/video streams, Lidars, GigE cameras, A2D/D2A devices, and many
@@ -41,6 +41,7 @@ Run:
       Terminal 2: > ./connectionless "UnicastRecvSocket -IP=127.0.0.1 -port=12345 -reuse"
 
     Multicast experiments:
+      !!! IMPORTANT: The IP addresses should be local interface IP addresses for both the sender and receiver
       Terminal 1: > ./connectionless "MulticastSendSocket -IP=127.0.0.1 -group=239.1.2.3 -port=12345" -endpointA
       Terminal 2: > ./connectionless "MulticastRecvSocket -IP=127.0.0.1 -group=239.1.2.3 -port=12345 -reuse"
 

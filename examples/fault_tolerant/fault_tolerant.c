@@ -206,6 +206,23 @@ static void *endpointThread(void *user_data) {
   return NULL;
 }
 
+#ifdef VXWORKS_7
+static int fault_tolerant_run(int argc, char **argv) {
+  if (argc == 1) {
+    printf("Usage: fault_tolerant(\"<interconnect_spec>\",<number_of_parameters>,\"[options]\")\n");
+    printf("  Options:\n");
+    printf("    -mt             Enable inter-thread communication (default is inter-process)\n");
+    printf("    -endpointA      If not multi threaded, then this process is marked as endpoint A (default is endpoint B)\n");
+    printf("    -poll           Enable polling communication (default is event driven)\n");
+    printf("    -errors         Print error messages (default is no errors printed)\n");
+    printf("    -timeout <N>    Set the timeout period (double value in seconds) to consider it as a\n");
+    printf("                    bad connection. Use -1 for infinity. Default is %f\n", L_timeout);
+    printf("    -simulateDelays Simulate delays before each transfer, where the delay period is between 0 and 3*timeout\n");
+    printf("  Example:\n");
+    printf("    fault_tolerant(\"InterThreadMemcpy -ID=1\",3,\"-mt\",\"-simulateDelays\",\"-poll\")\n");
+    return 1;
+  }
+#else
 int main(int argc, char **argv) {
   if (argc == 1) {
     printf("Usage: fault_tolerant <interconnect_spec> [options]\n");
@@ -219,6 +236,9 @@ int main(int argc, char **argv) {
     printf("    -simulateDelays Simulate delays before each transfer, where the delay period is between 0 and 3*timeout\n");
     return 1;
   }
+#endif
+
+  // Parse command line args
   getArgValues(argc, argv);
 
   if (L_is_multi_threaded) {
@@ -234,3 +254,31 @@ int main(int argc, char **argv) {
 
   return 0;
 }
+
+#ifdef VXWORKS_7
+#define ARGV_LIST_MAX 20
+int fault_tolerant(char *interconnect_spec_arg, int count, ...) {
+  char *argv_list[ARGV_LIST_MAX];
+  int arg_count = 0;
+  argv_list[0] = "fault_tolerant";
+  arg_count++;
+  if (NULL != interconnect_spec_arg) {
+    argv_list[arg_count] = interconnect_spec_arg;
+    arg_count++;
+  }
+  va_list valist;
+  va_start(valist, count);
+  
+  if (count > (ARGV_LIST_MAX-arg_count)) {
+    printf("ERROR: exceeded <number_of_parameters>\n");
+    return (fault_tolerant_run(1,NULL));
+  }
+  for (int i=0; i<count; i++) {
+    argv_list[arg_count] = va_arg(valist, char*);
+    arg_count++;
+  }
+  va_end(valist);
+
+  return (fault_tolerant_run(arg_count,argv_list));
+}
+#endif

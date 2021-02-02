@@ -29,7 +29,7 @@ bool endianIsBig() {
 void endianSwapUInt16(uint16_t *data, uint64_t num_elements) {
   for (int i=0; i<num_elements; i++) {
     uint16_t value = data[i];
-    data[i] = (value>>8) | (value<<8);
+    data[i] = (uint16_t)((value>>8) | (value<<8));
   }
 }
 

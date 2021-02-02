@@ -133,7 +133,12 @@ void takyonMmapFree(TakyonMmapHandle mmap_handle) {
 #include <unistd.h>
 #include <errno.h>
 #include <sys/mman.h>
+#ifdef VXWORKS_7
+#include <ioLib.h>
+#include <sys/stat.h>
+#else
 #include <sys/file.h>
+#endif
 
 #define MEMORY_MAP_PREFIX   "/"  // Prefix required by Posix, and matches the internals of Takyon memory maps
 

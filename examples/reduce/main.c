@@ -31,6 +31,7 @@ void *appAllocateMemory(const char *name, const char *where, uint64_t bytes, voi
     *user_data_ret = NULL;
     void *addr = malloc(bytes);
     return addr;
+#ifndef VXWORKS_7
   } else if (strcmp(where, "MMAP") == 0) {
     char map_name[TAKYON_MAX_MMAP_NAME_CHARS];
     snprintf(map_name, TAKYON_MAX_MMAP_NAME_CHARS, "%s", name);
@@ -39,15 +40,31 @@ void *appAllocateMemory(const char *name, const char *where, uint64_t bytes, voi
     takyonMmapAlloc(map_name, bytes, &addr, &mmap_handle);
     *user_data_ret = mmap_handle;
     return addr;
+#endif
   }
   return NULL;
 }
 
 void appFreeMemory(const char *where, void *user_data, void *addr) {
   if (strcmp(where, "CPU") == 0) free(addr);
+#ifndef VXWORKS_7
   else if (strcmp(where, "MMAP") == 0) takyonMmapFree((TakyonMmapHandle)user_data);
+#endif
 }
 
+#ifdef VXWORKS_7
+int reduce(int process_id_arg, char *graph_filename_arg, int ncycles_arg, int scatter_arg) {
+  if (graph_filename_arg == NULL) {
+    printf("Usage: reduce(<process_id>,\"<graph_filename>\",<ncycles>,<scatter[0/1]>)\n");
+    return 1;
+  }
+  int process_id = process_id_arg;
+  const char *filename = graph_filename_arg;
+  if (ncycles_arg > 0) {
+    L_ncycles = ncycles_arg;
+  }
+  L_scatter_result = scatter_arg;
+#else
 int main(int argc, char **argv) {
   if (argc < 3) {
     printf("Usage: %s <process_id> <graph_filename> [options]\n", argv[0]);
@@ -56,7 +73,6 @@ int main(int argc, char **argv) {
     printf("    -scatter           Scatter the reduction result to all threads. Default is results are not scattered\n");
     exit(EXIT_FAILURE);
   }
-
   // Get args
   int index = 3;
   while (index < argc) {
@@ -68,12 +84,14 @@ int main(int argc, char **argv) {
     }
     index++;
   }
+  int process_id = atoi(argv[1]);
+  const char *filename = argv[2];
+#endif
+
   printf("ncycles = %d\n", L_ncycles);
   printf("scatter = %s\n", L_scatter_result ? "yes" : "no");
 
   // Load graph and create any memory blocks
-  int process_id = atoi(argv[1]);
-  const char *filename = argv[2];
   printf("Loading graph description '%s'...\n", filename);
   L_graph = takyonLoadGraphDescription(process_id, filename);
   takyonPrintGraph(L_graph);

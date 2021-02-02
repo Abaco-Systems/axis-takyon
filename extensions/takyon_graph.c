@@ -1856,7 +1856,7 @@ TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, 
   TakyonCollectiveOne2One *collective = NULL;
   TakyonCollective *collective_desc = takyonGetCollective(graph, name);
   if ((collective_desc != NULL) && (collective_desc->type == TAKYON_COLLECTIVE_ONE2ONE)) {
-    // Count the paths
+    // Count the source and dest paths in the group instance
     int num_src_paths = 0;
     int num_dest_paths = 0;
     for (int j=0; j<collective_desc->num_paths; j++) {
@@ -1869,7 +1869,7 @@ TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, 
         num_dest_paths++;
       }
     }
-    // Record the paths
+    // Allocate the memory to temporarily store the source and dest paths
     TakyonPath **src_path_list = NULL;
     TakyonPath **dest_path_list = NULL;
     if (num_src_paths > 0) {
@@ -1880,6 +1880,7 @@ TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, 
       dest_path_list = (TakyonPath **)calloc(num_dest_paths, sizeof(TakyonPath *));
       validateAllocation(dest_path_list, __FUNCTION__);
     }
+    // Re-count and store the source and dest paths in the temporary arrays
     num_src_paths = 0;
     num_dest_paths = 0;
     for (int j=0; j<collective_desc->num_paths; j++) {
@@ -1894,7 +1895,9 @@ TakyonCollectiveOne2One *takyonGetOne2One(TakyonGraph *graph, const char *name, 
         num_dest_paths++;
       }
     }
+    // Store the source and dest paths, for this group instance, in a collective data structure (a separate allocation will be done so the temp lists can be freed)
     collective = takyonOne2OneInit(collective_desc->num_paths, num_src_paths, num_dest_paths, src_path_list, dest_path_list);
+    // Free the temp lists
     if (src_path_list != NULL) free(src_path_list);
     if (dest_path_list != NULL) free(dest_path_list);
   }

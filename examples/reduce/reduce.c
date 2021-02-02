@@ -43,12 +43,12 @@ void reduceTask(TakyonGraph *graph, int group_id, int ncycles, bool scatter_resu
 
   for (int i=0; i<ncycles; i++) {
     // Fill in the data to be reduced
-    for (uint64_t i=0; i<reduce_nelements; i++) data_addr[i] = (rand() % 1000);
+    for (uint64_t j=0; j<reduce_nelements; j++) data_addr[j] = (rand() % 1000);
     // Reduce the data
     if (is_tree_root) {
       takyonReduceRoot(reduce, reduce_buffer, reduce_nelements, bytes_per_elem, vector_max, data_addr, scatter_result);
       printf("Root Thread:");
-      for (uint64_t i=0; i<reduce_nelements; i++) printf(" %d", data_addr[i]);
+      for (uint64_t j=0; j<reduce_nelements; j++) printf(" %d", data_addr[j]);
       printf("\n");
     } else {
       takyonReduceChild(reduce, reduce_buffer, reduce_nelements, bytes_per_elem, vector_max, scatter_result);
@@ -56,7 +56,7 @@ void reduceTask(TakyonGraph *graph, int group_id, int ncycles, bool scatter_resu
         int *result = (int *)reduce->parent_path->attrs.recver_addr_list[reduce_buffer];
         if (tree_index == (tree_instances-1)) {
           printf("Last Thread:");
-          for (uint64_t i=0; i<reduce_nelements; i++) printf(" %d", result[i]);
+          for (uint64_t j=0; j<reduce_nelements; j++) printf(" %d", result[j]);
           printf("\n");
         }
       }

@@ -27,8 +27,8 @@ void takyonSleep(double seconds) {
     Sleep(milliseconds);
   }
 #else
-  int int_seconds = floor(seconds);
-  int nanosecs = ((seconds - int_seconds) * 1000000000);
+  int int_seconds = (int)floor(seconds);
+  int nanosecs = (int)((seconds - int_seconds) * 1000000000);
   if (int_seconds > 0 || nanosecs > 0) {
     struct timespec rqtp;
     rqtp.tv_sec = int_seconds;

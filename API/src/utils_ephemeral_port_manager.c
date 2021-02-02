@@ -12,8 +12,9 @@
 #include "takyon_private.h"
 
 // DANGEROUS: If USE_AT_EXIT_METHOD is not used, this alternative is not thread safe, so all path's should be created/destroyed from the same thread to avoid race conditions
-/*+ don't do this if VxWorks */
+#ifndef VXWORKS_7
 #define USE_AT_EXIT_METHOD  // This is a cleaner way IMHO to handle cleaning up resources, but only works if the OS supports atexit().
+#endif
 
 #define TAKYON_MULTICAST_IP    "127.0.0.1"    // A local interface that is multicast capable (for both sending and receiving)
 #define TAKYON_MULTICAST_PORT  6736           // Uses phone digits to spell "Open"
@@ -123,7 +124,7 @@ static void addItem(const char *interconnect_name, uint32_t path_id, uint16_t ep
   item->in_use = true;
   item->path_id = path_id;
   item->ephemeral_port_number = ephemeral_port_number;
-  item->timestamp = clockTimeNanoseconds() / NANOSECONDS_PER_SECOND_DOUBLE;
+  item->timestamp = (double)((double)clockTimeNanoseconds() / NANOSECONDS_PER_SECOND_DOUBLE);
   strncpy(item->interconnect_name, interconnect_name, TAKYON_MAX_INTERCONNECT_CHARS-1);
   item->interconnect_name[TAKYON_MAX_INTERCONNECT_CHARS-1] = '\0';
 }
@@ -143,7 +144,7 @@ static void removeItem(const char *interconnect_name, uint32_t path_id) {
 #ifdef DEBUG_MESSAGE
   printf("Ephemeral port manager: removing item (interconnect='%s', path_id=%u)\n", interconnect_name, path_id);
 #endif
-  double curr_time = clockTimeNanoseconds() / NANOSECONDS_PER_SECOND_DOUBLE;
+  double curr_time = (double)((double)clockTimeNanoseconds() / NANOSECONDS_PER_SECOND_DOUBLE);
   for (uint32_t i=0; i<L_num_manager_items; i++) {
     EphemeralPortManagerItem *item = &L_manager_items[i];
     if (item->in_use) {

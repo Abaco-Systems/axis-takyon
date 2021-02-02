@@ -448,7 +448,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     if (sender_bytes > 0) {
       if (path->attrs.sender_addr_list[buf_index] == 0) {
         int alignment = memoryPageSize();
-        void *addr;
+        void *addr = NULL;
         bool do_cpu_alloc = true;
 #ifdef WITH_CUDA
         buffers->send_buffer_list[buf_index].sender_is_cuda_addr = (src_cuda_device_id >= 0);
@@ -467,8 +467,10 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
             goto cleanup;
           }
         }
-        path->attrs.sender_addr_list[buf_index] = (size_t)addr;
-        buffers->send_buffer_list[buf_index].sender_addr = (size_t)addr;
+        if (NULL != addr) {
+          path->attrs.sender_addr_list[buf_index] = (size_t)addr;
+          buffers->send_buffer_list[buf_index].sender_addr = (size_t)addr;
+        }
       } else {
         // Was already provided by the application
       }
@@ -481,7 +483,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     if (recver_bytes > 0) {
       if (path->attrs.recver_addr_list[buf_index] == 0) {
         int alignment = memoryPageSize();
-        void *addr;
+        void *addr=NULL;
         bool do_cpu_alloc = true;
 #ifdef WITH_CUDA
         buffers->recv_buffer_list[buf_index].recver_is_cuda_addr = (dest_cuda_device_id >= 0);
@@ -500,8 +502,10 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
             goto cleanup;
           }
         }
-        path->attrs.recver_addr_list[buf_index] = (size_t)addr;
-        buffers->recv_buffer_list[buf_index].recver_addr = (size_t)addr;
+        if(NULL != addr) {
+          path->attrs.recver_addr_list[buf_index] = (size_t)addr;
+          buffers->recv_buffer_list[buf_index].recver_addr = (size_t)addr;
+        }
       } else {
         // Was already provided by the application
       }

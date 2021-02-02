@@ -187,7 +187,6 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   //   "UnicastSendSocket -IP=<IP> -port=<port>"
 
   // Get interconnect params
-  unsigned short port_number = 0;
   char ip_addr[TAKYON_MAX_INTERCONNECT_CHARS];
 
   // Destination IP address
@@ -199,17 +198,16 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Port number
-  uint32_t temp_port_number = 0;
-  ok = argGetUInt(path->attrs.interconnect, "-port=", &temp_port_number, &found, path->attrs.error_message);
+  uint32_t port_number = 0;
+  ok = argGetUInt(path->attrs.interconnect, "-port=", &port_number, &found, path->attrs.error_message);
   if (!ok || !found) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec missing -port=<value> for socket\n");
     return false;
   }
-  if ((temp_port_number < 1024) || (temp_port_number > 65535)) {
+  if ((port_number < 1024) || (port_number > 65535)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "port numbers need to be between 1024 and 65535\n");
     return false;
   }
-  port_number = temp_port_number;
 
   // Validate the restricted attribute values
   if (!path->attrs.is_endpointA) {
@@ -270,7 +268,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Create the one sided socket
-  if (!socketCreateUnicastSender(ip_addr, port_number, &buffers->socket_fd, &buffers->sock_in_addr, path->attrs.error_message)) {
+  if (!socketCreateUnicastSender(ip_addr, (uint16_t)port_number, &buffers->socket_fd, &buffers->sock_in_addr, path->attrs.error_message)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create UDP sender socket\n");
     goto cleanup;
   }

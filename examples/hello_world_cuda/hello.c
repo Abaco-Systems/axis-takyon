@@ -13,7 +13,7 @@
 #include <cuda_runtime.h>
 
 #define MAX_BUFFER_NAME 10
-#define NUM_LOOPS 3
+#define NUM_LOOPS 10
 
 // IMPORTANT: this will be set by main.c if the graph file name contains the word "shared", which shloud only be used if the interconnect uses a shared pointer.
 bool G_interconnect_is_shared_pointer = false;
@@ -57,7 +57,7 @@ void helloTask(TakyonGraph *graph, int group_id) {
       bool endpointA_is_cuda = (strncmp(endpointA_mem_name, "CUDA", 4) == 0);
       bool endpointB_is_cuda = (strncmp(endpointB_mem_name, "CUDA", 4) == 0);
 
-      // If this is a shared pointeer interconnect, then only check the dest buffer
+      // If this is a shared pointer interconnect, then only check the dest buffer
       if (G_interconnect_is_shared_pointer) {
         endpointA_mem_name = endpointB_mem_name;
         endpointA_is_cuda = endpointB_is_cuda;

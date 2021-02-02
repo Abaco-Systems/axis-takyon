@@ -33,6 +33,10 @@
 #include <poll.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
+#ifdef VXWORKS_7
+#include <sys/fcntlcom.h>
+#include <sys/time.h>
+#endif
 #ifdef __APPLE__
 #include <signal.h>
 #endif
@@ -121,7 +125,8 @@ static bool setSocketTimeout(int socket_fd, int timeout_name, int64_t timeout_ns
 
 static size_t socket_write_private(int socket, void *addr, size_t bytes_to_write) {
   // The send() or write() can crash due to a SIGPIPE, so need a way to mask that signal while transferring, and instead return a graceful failure code.
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined (VXWORKS_7)
+  // NOTE: VxWorks does not seem to support MSG_NOSIGNAL, use Apple's method. TCP Sockets seem to work, but not Local Unix sockets.
   // NOTE: APPLEs OSX does not support MSG_NOSIGNAL so can't use send()
   // The write() can abort if the socket is no longer valid. To avoid this, need to catch the SIGPIPE signal
   struct sigaction new_actn, old_actn;

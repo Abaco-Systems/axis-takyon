@@ -15,8 +15,8 @@ void pipelineTask(TakyonGraph *graph, int group_id, int ncycles) {
   TakyonGroup *group = takyonGetGroup(graph, group_id);
   int pipe_index = takyonGetGroupInstance(graph, group_id);
   TakyonCollectiveOne2One *collective = takyonGetOne2One(graph, "pipeline", group_id);
-  TakyonPath *src_path = (collective->num_src_paths > 0) ? NULL : collective->src_path_list[0];
-  TakyonPath *dest_path = (collective->num_dest_paths > 0) ? NULL : collective->dest_path_list[0];
+  TakyonPath *src_path = (collective->num_src_paths > 0) ? collective->src_path_list[0] : NULL;
+  TakyonPath *dest_path = (collective->num_dest_paths > 0) ? collective->dest_path_list[0] : NULL;
   if ((src_path == NULL) && (dest_path == NULL)) {
     fprintf(stderr, "Pipeline is missing the paths for thread %s[%d]\n", group->name, pipe_index);
     exit(EXIT_FAILURE);

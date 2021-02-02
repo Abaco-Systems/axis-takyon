@@ -327,7 +327,10 @@ If you want to let the system determine an unused (ephemeral) IP port number:
 ```
 For the above ephemeral port number method, Takyon uses implicit multicast transfers to pass the ephemeral port from the server to the client. The following Takyon multicast defaults can be overridden by environment variables:
 ```
-TAKYON_MULTICAST_IP    "127.0.0.1"            An IP interface that is multicast capable
+TAKYON_MULTICAST_IP    "127.0.0.1"            A local IP interface that is multicast capable.
+                                              "127.0.0.1" will only work if using local sockets
+                                              so make sure to set it to an IP that can multicast
+                                              to other endpoints on the network.
 TAKYON_MULTICAST_PORT   6736                  Fun note: Uses phone digits to spell "Open"
 TAKYON_MULTICAST_GROUP "229.82.29.66"         Fun note: Uses phone digits to spell "Takyon"
                                                         i.e. 229.TA.KY.ON

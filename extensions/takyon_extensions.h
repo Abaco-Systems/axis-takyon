@@ -40,8 +40,8 @@ typedef struct {
 
 typedef struct {
   int npaths;                   // Total paths in the collective
-  int num_src_paths;
-  int num_dest_paths;
+  int num_src_paths;            // Number of valid source paths in this group instance
+  int num_dest_paths;           // Number of valid destination paths in this group instance
   TakyonPath **src_path_list;   // NULL if not using this group
   TakyonPath **dest_path_list;  // NULL if not using this group
 } TakyonCollectiveOne2One;

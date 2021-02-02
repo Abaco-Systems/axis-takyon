@@ -198,12 +198,14 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     setInterThreadMemcpyFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "InterThreadPointer") == 0) {
     setInterThreadPointerFunctionPointers(private_path);
+#ifndef VXWORKS_7
   } else if (strcmp(interconnect_module, "InterProcessMemcpy") == 0) {
     setInterProcessMemcpyFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "InterProcessPointer") == 0) {
     setInterProcessPointerFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "InterProcessSocket") == 0) {
     setInterProcessSocketFunctionPointers(private_path);
+#endif
   } else if (strcmp(interconnect_module, "Socket") == 0) {
     setSocketFunctionPointers(private_path);
   } else if (strcmp(interconnect_module, "OneSidedSocket") == 0) {

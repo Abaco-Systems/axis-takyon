@@ -1,14 +1,14 @@
 Groups
-Group: pipe
+Group: node
   Instances: 11
 
 Processes
 Process: 0
-  GroupIDs: pipe[0] pipe[1] pipe[2]
+  GroupIDs: node[0] node[1] node[2]
 Process: 1
-  GroupIDs: pipe[3] pipe[4] pipe[5] pipe[6]
+  GroupIDs: node[3] node[4] node[5] node[6]
 Process: 2
-  GroupIDs: pipe[7] pipe[8] pipe[9] pipe[10]
+  GroupIDs: node[7] node[8] node[9] node[10]
 
 Buffers
 
@@ -25,109 +25,55 @@ Defaults
   PathDestroyTimeout: TAKYON_WAIT_FOREVER, TAKYON_WAIT_FOREVER
   SendCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
   RecvCompletionMethod: TAKYON_BLOCKING, TAKYON_BLOCKING
-  NBufsAtoB: 2, 2
-  NBufsBtoA: 1, 1
-  SenderMaxBytesList: 4 4, 0
-  RecverMaxBytesList: 0, 4 4
-  SenderAddrList: NULL NULL, NULL
-  RecverAddrList: NULL, NULL NULL
-Path: 0
-  Endpoints: pipe[0], pipe[1]
-  InterconnectA: InterThreadMemcpy -ID=1
-  InterconnectB: InterThreadMemcpy -ID=1
-Path: 1
-  Endpoints: pipe[1], pipe[2]
-  InterconnectA: InterThreadMemcpy -ID=2
-  InterconnectB: InterThreadMemcpy -ID=2
-Path: 2
-  Endpoints: pipe[2], pipe[3]
-  InterconnectA: InterProcessSocket -ID=3
-  InterconnectB: InterProcessSocket -ID=3
-Path: 3
-  Endpoints: pipe[3], pipe[4]
-  InterconnectA: InterThreadMemcpy -ID=4
-  InterconnectB: InterThreadMemcpy -ID=4
-Path: 4
-  Endpoints: pipe[4], pipe[5]
-  InterconnectA: InterThreadMemcpy -ID=5
-  InterconnectB: InterThreadMemcpy -ID=5
-Path: 5
-  Endpoints: pipe[5], pipe[6]
-  InterconnectA: InterThreadMemcpy -ID=6
-  InterconnectB: InterThreadMemcpy -ID=6
-Path: 6
-  Endpoints: pipe[6], pipe[7]
-  InterconnectA: InterProcessMemcpy -ID=7
-  InterconnectB: InterProcessMemcpy -ID=7
-Path: 7
-  Endpoints: pipe[7], pipe[8]
-  InterconnectA: InterThreadMemcpy -ID=8
-  InterconnectB: InterThreadMemcpy -ID=8
-Path: 8
-  Endpoints: pipe[8], pipe[9]
-  InterconnectA: InterThreadMemcpy -ID=9
-  InterconnectB: InterThreadMemcpy -ID=9
-Path: 9
-  Endpoints: pipe[9], pipe[10]
-  InterconnectA: InterThreadMemcpy -ID=10
-  InterconnectB: InterThreadMemcpy -ID=10
-Path: 10
-  Endpoints: pipe[10], pipe[0]
-  InterconnectA: InterProcessMemcpy -ID=11
-  InterconnectB: InterProcessMemcpy -ID=11
-Defaults
   NBufsAtoB: 1, 1
   NBufsBtoA: 1, 1
   SenderMaxBytesList: 0, 0
   RecverMaxBytesList: 0, 0
   SenderAddrList: NULL, NULL
   RecverAddrList: NULL, NULL
-Path: 11
-  Endpoints: pipe[0], pipe[1]
-  InterconnectA: InterThreadMemcpy -ID=12
-  InterconnectB: InterThreadMemcpy -ID=12
-Path: 12
-  Endpoints: pipe[0], pipe[2]
-  InterconnectA: InterThreadMemcpy -ID=13
-  InterconnectB: InterThreadMemcpy -ID=13
-Path: 13
-  Endpoints: pipe[1], pipe[3]
+Path: 0
+  Endpoints: node[0], node[1]
+  InterconnectA: InterThreadMemcpy -ID=10
+  InterconnectB: InterThreadMemcpy -ID=10
+Path: 1
+  Endpoints: node[0], node[2]
+  InterconnectA: InterThreadMemcpy -ID=11
+  InterconnectB: InterThreadMemcpy -ID=11
+Path: 2
+  Endpoints: node[1], node[3]
+  InterconnectA: InterProcessSocket -ID=12
+  InterconnectB: InterProcessSocket -ID=12
+Path: 3
+  Endpoints: node[1], node[4]
+  InterconnectA: InterProcessMemcpy -ID=13
+  InterconnectB: InterProcessMemcpy -ID=13
+Path: 4
+  Endpoints: node[2], node[5]
   InterconnectA: InterProcessSocket -ID=14
   InterconnectB: InterProcessSocket -ID=14
-Path: 14
-  Endpoints: pipe[1], pipe[4]
+Path: 5
+  Endpoints: node[2], node[6]
   InterconnectA: InterProcessMemcpy -ID=15
   InterconnectB: InterProcessMemcpy -ID=15
-Path: 15
-  Endpoints: pipe[2], pipe[5]
-  InterconnectA: InterProcessSocket -ID=16
-  InterconnectB: InterProcessSocket -ID=16
-Path: 16
-  Endpoints: pipe[2], pipe[6]
-  InterconnectA: InterProcessMemcpy -ID=17
-  InterconnectB: InterProcessMemcpy -ID=17
-Path: 17
-  Endpoints: pipe[2], pipe[7]
-  InterconnectA: InterProcessMemcpy -ID=18
-  InterconnectB: InterProcessMemcpy -ID=18
-Path: 18
-  Endpoints: pipe[4], pipe[8]
-  InterconnectA: InterProcessSocket -ID=19
-  InterconnectB: InterProcessSocket -ID=19
-Path: 19
-  Endpoints: pipe[4], pipe[9]
-  InterconnectA: InterProcessSocket -ID=20
-  InterconnectB: InterProcessSocket -ID=20
-Path: 20
-  Endpoints: pipe[5], pipe[10]
-  InterconnectA: InterProcessMemcpy -ID=21
-  InterconnectB: InterProcessMemcpy -ID=21
+Path: 6
+  Endpoints: node[2], node[7]
+  InterconnectA: InterProcessMemcpy -ID=16
+  InterconnectB: InterProcessMemcpy -ID=16
+Path: 7
+  Endpoints: node[4], node[8]
+  InterconnectA: InterProcessSocket -ID=17
+  InterconnectB: InterProcessSocket -ID=17
+Path: 8
+  Endpoints: node[4], node[9]
+  InterconnectA: InterProcessSocket -ID=18
+  InterconnectB: InterProcessSocket -ID=18
+Path: 9
+  Endpoints: node[5], node[10]
+  InterconnectA: InterProcessMemcpy -ID=19
+  InterconnectB: InterProcessMemcpy -ID=19
 
 Collectives
-Collective: pipeline
-  Type: ONE2ONE
-  PathSrcIds: 0:A 1:A 2:A 3:A 4:A 5:A 6:A 7:A 8:A 9:A 10:A
 Collective: barrier
   Type: BARRIER
   # Path list is a depth first tree with any number of children per parent
-  PathSrcIds: 11:A ( 13:A 14:A ( 18:A 19:A ) ) 12:A ( 15:A ( 20:A ) 16:A 17:A )
+  PathSrcIds: 0:A ( 2:A 3:A ( 7:A 8:A ) ) 1:A ( 4:A ( 9:A ) 5:A 6:A )

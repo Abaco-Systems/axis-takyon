@@ -181,7 +181,7 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
 
   // Get the function pointers from the loaded shared object library
   if (!sharedLibraryGetInterconnectFunctionPointers(interconnect_module, private_path, attributes->error_message)) {
-    TAKYON_RECORD_ERROR(attributes->error_message, "Failed to get the '%s' interconnect's function pointers.\n", interconnect_module);
+    TAKYON_RECORD_ERROR(attributes->error_message, "Failed to determine the functionality for the '%s' interconnect. If using Takyon's shared libraries, make sure the environment variable TAKYON_PATH is pointing to the correct folder. If using Takyon's static library, make sure the Makefile is pointing to the correct file. Otherwise the interconnect may not be available on this platfrom.\n", interconnect_module);
     checkFailureReportingMethod(attributes, __FUNCTION__);
     free(private_path);
     free(path);

@@ -1,27 +1,21 @@
 Description:
 ------------
   This example is designed to show how the Takyon extention functions can be used to
-  organize collective communications, in this case a pipeline of paths used to create
-  one long path and a tree based barrier is used to synchronize the processing of the
-  pipeline processing.
+  organize paths into a tree based barrier collective.
 
   This example has features to emphasize the flexibility of Takyon and its extentions:
-    - simplifies how to start an app: <executable> <process_id> <graph_description_file>
+    - Simplifies how to start an app: <executable> <process_id> <graph_description_file>
     - Mixes inter-threaded with inter-process paths in a single app.
-    - Allows Takyon paths to be grouped into collective calls (e.g. a pipeline and barrier).
+    - Allows Takyon paths to be grouped into collective calls (e.g. a barrier).
     - Adding more paths is simple, just update the graph description file, and run
       more executables if needed. No compiling is needed, which means this app
       is scalable.
-
-  The executable has one type of processing thread:
-    1. Move data on the pipeline.
-    2. Do a barrier before moving data on the pipeline again.
 
   Source files:
     main.c - Loads the graph description file, allocates any needed memory blocks,
              and starts the appropriate threads. This is the framework for the application.
     barrier.c - This is the heart of the algorithm. Notice this source code is
-             compleltly scalable; i.e. if more paths are added in the graph description
+             completely scalable; i.e. if more paths are added in the graph description
              file, this source code remains unaffected.
 
   There are some supported command line arguments used to tune the application

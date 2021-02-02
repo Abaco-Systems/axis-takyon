@@ -389,20 +389,19 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Get the port number
-  uint32_t temp_port_number = 0;
+  uint32_t port_number = 0;
   bool port_number_found = false;
-  ok = argGetUInt(path->attrs.interconnect, "-port=", &temp_port_number, &port_number_found, path->attrs.error_message);
+  ok = argGetUInt(path->attrs.interconnect, "-port=", &port_number, &port_number_found, path->attrs.error_message);
   if (!ok) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec -port=<value> is invalid\n");
     return false;
   }
   if (port_number_found) {
-    if ((temp_port_number < 1024) || (temp_port_number > 65535)) {
+    if ((port_number < 1024) || (port_number > 65535)) {
       TAKYON_RECORD_ERROR(path->attrs.error_message, "port numbers need to be between 1024 and 65535\n");
       return false;
     }
   }
-  unsigned short port_number = temp_port_number;
 
   // Verify only path ID or port number set
   if (path_id_found && port_number_found) {
@@ -514,7 +513,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
         goto cleanup;
       }
     } else {
-      if (!socketCreateTcpClient(ip_addr, port_number, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
+      if (!socketCreateTcpClient(ip_addr, (uint16_t)port_number, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
         TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create TCP client socket\n");
         goto cleanup;
       }
@@ -526,7 +525,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
         goto cleanup;
       }
     } else {
-      if (!socketCreateTcpServer(ip_addr, port_number, allow_reuse, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
+      if (!socketCreateTcpServer(ip_addr, (uint16_t)port_number, allow_reuse, &buffers->socket_fd, private_path->path_create_timeout_ns, path->attrs.error_message)) {
         TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create TCP server socket\n");
         goto cleanup;
       }

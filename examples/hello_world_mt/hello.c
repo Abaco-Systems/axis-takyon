@@ -65,13 +65,26 @@ static void *hello_thread(void *user_data) {
   return NULL;
 }
 
+#ifdef VXWORKS_7
+int hello_world_mt(char *interconnect_arg) {
+  if (NULL == interconnect_arg) {
+    printf("Usage: hello_world_mt(\"<interconnect_spec>\")\n");
+    return 1;
+  }
+  interconnect = interconnect_arg;
+#else
 int main(int argc, char **argv) {
   if (argc != 2) { printf("usage: hello <interconnect>\n"); return 1; }
   interconnect = argv[1];
+#endif
+
+  // Start threads
   pthread_t endpointA_thread_id;
   pthread_t endpointB_thread_id;
   pthread_create(&endpointA_thread_id, NULL, hello_thread, (void *)1LL);
   pthread_create(&endpointB_thread_id, NULL, hello_thread, NULL);
+
+  // Wait for threads to complete processing
   pthread_join(endpointA_thread_id, NULL);
   pthread_join(endpointB_thread_id, NULL);
   return 0;

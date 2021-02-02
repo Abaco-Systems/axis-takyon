@@ -151,7 +151,6 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 
   // Get interconnect params
   bool allow_reuse = argGetFlag(path->attrs.interconnect, "-reuse");
-  unsigned short port_number = 0;
   char ip_addr[TAKYON_MAX_INTERCONNECT_CHARS];
   char multicast_group[TAKYON_MAX_INTERCONNECT_CHARS];
 
@@ -164,17 +163,16 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Port number
-  uint32_t temp_port_number = 0;
-  ok = argGetUInt(path->attrs.interconnect, "-port=", &temp_port_number, &found, path->attrs.error_message);
+  uint32_t port_number = 0;
+  ok = argGetUInt(path->attrs.interconnect, "-port=", &port_number, &found, path->attrs.error_message);
   if (!ok || !found) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "interconnect spec missing -port=<value> for socket\n");
     return false;
   }
-  if ((temp_port_number < 1024) || (temp_port_number > 65535)) {
+  if ((port_number < 1024) || (port_number > 65535)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "port numbers need to be between 1024 and 65535\n");
     return false;
   }
-  port_number = temp_port_number;
 
   // Multicast group
   ok = argGetText(path->attrs.interconnect, "-group=", multicast_group, TAKYON_MAX_INTERCONNECT_CHARS, &found, path->attrs.error_message);
@@ -242,7 +240,7 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   }
 
   // Create the one sided socket
-  if (!socketCreateMulticastReceiver(ip_addr, multicast_group, port_number, allow_reuse, &buffers->socket_fd, path->attrs.error_message)) {
+  if (!socketCreateMulticastReceiver(ip_addr, multicast_group, (uint16_t)port_number, allow_reuse, &buffers->socket_fd, path->attrs.error_message)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to create multicast receiver socket\n");
     goto cleanup;
   }
