@@ -30,7 +30,7 @@ TAKYON_H_FILES :=
 TAKYON_H_FILES += ../../inc/takyon.h
 TAKYON_H_FILES += ../../inc/takyon_private.h
 
-CFLAGS         := -std=gnu99 -Wall -Werror -pthread -I../../inc
+CFLAGS         := -std=gnu99 -Wall -pthread -I../../inc  # -Werror
 #CFLAGS         += -g
 CFLAGS         += -O2
 SO_CFLAGS      := $(CFLAGS) -fPIC
