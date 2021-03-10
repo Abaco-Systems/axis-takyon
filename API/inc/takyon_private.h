@@ -179,6 +179,7 @@ extern void ephemeralPortManagerFinalize();
 extern void ephemeralPortManagerSet(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number, uint64_t verbosity);
 extern uint16_t ephemeralPortManagerGet(const char *interconnect_name, uint32_t path_id, int64_t timeout_ns, bool *timed_out_ret, uint64_t verbosity, char *error_message);
 extern void ephemeralPortManagerRemove(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number);
+extern void ephemeralPortManagerRemoveLocally(const char *interconnect_name, uint32_t path_id);
 
 // Pipes (helpful with closing sockets that are sleeping while waiting for activity)
 extern bool pipeWakeUpSelect(int read_pipe_fd, int write_pipe_fd, char *error_message);

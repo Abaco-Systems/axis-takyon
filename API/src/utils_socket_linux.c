@@ -943,6 +943,7 @@ bool socketCreateEphemeralTcpServer(const char *ip_addr, const char *interconnec
   if (timeout_ns >= 0) {
     if (!wait_for_socket_read_activity(listening_fd, timeout_ns, error_message)) {
       TAKYON_RECORD_ERROR(error_message, "Failed to listen for connection\n");
+      ephemeralPortManagerRemoveLocally(interconnect_name, path_id);
       close(listening_fd);
       return false;
     }
@@ -950,6 +951,7 @@ bool socketCreateEphemeralTcpServer(const char *ip_addr, const char *interconnec
 
   // This typically blocks until a connection is actually made, but the above function will do the same but with a timeout
   int socket_fd = accept(listening_fd, NULL, NULL);
+  ephemeralPortManagerRemoveLocally(interconnect_name, path_id);
   if (socket_fd == -1) {
     TAKYON_RECORD_ERROR(error_message, "Could not accept TCP socket. errno=%d\n", errno);
     close(listening_fd);

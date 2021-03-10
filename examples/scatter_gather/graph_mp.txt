@@ -67,12 +67,17 @@ Path: 2
   Endpoints: parent[0], child[2]
   InterconnectA: InterProcessMemcpy -ID=3 -recverAddrMmapNamePrefix=gatherDest
   InterconnectB: InterProcessMemcpy -ID=3
+  # InterconnectA: Socket -client -IP=<server_ip_addr> -port=12345
+  # InterconnectB: Socket -server -IP=<local_ip_addr> -port=12345 -reuse
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 Path: 3
   Endpoints: parent[0], child[3]
   InterconnectA: InterProcessSocket -ID=4
   InterconnectB: InterProcessSocket -ID=4
+  # NOTE: Set the environment variable TAKYON_MULTICAST_IP=<local_ip_addr>, on both endpoints, if using -ID with Sockets.
+  # InterconnectA: Socket -client -IP=<server_ip_addr> -ID=4
+  # InterconnectB: Socket -server -IP=<local_ip_addr> -ID=4
   SenderAddrList: scatterSrc0:0 scatterSrc1:0, NULL NULL
   RecverAddrList: gatherDest0:0 gatherDest1:0, NULL NULL
 

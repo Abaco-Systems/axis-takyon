@@ -1,14 +1,14 @@
 Groups
-Group: node
+Group: treeNode
   Instances: 11
 
 Processes
 Process: 0
-  GroupIDs: node[0] node[1] node[2]
+  GroupIDs: treeNode[0] treeNode[1] treeNode[2]
 Process: 1
-  GroupIDs: node[3] node[4] node[5] node[6]
+  GroupIDs: treeNode[3] treeNode[4] treeNode[5] treeNode[6]
 Process: 2
-  GroupIDs: node[7] node[8] node[9] node[10]
+  GroupIDs: treeNode[7] treeNode[8] treeNode[9] treeNode[10]
 
 Buffers
 
@@ -32,43 +32,48 @@ Defaults
   SenderAddrList: NULL, NULL
   RecverAddrList: NULL, NULL
 Path: 0
-  Endpoints: node[0], node[1]
+  Endpoints: treeNode[0], treeNode[1]
   InterconnectA: InterThreadMemcpy -ID=10
   InterconnectB: InterThreadMemcpy -ID=10
 Path: 1
-  Endpoints: node[0], node[2]
+  Endpoints: treeNode[0], treeNode[2]
   InterconnectA: InterThreadMemcpy -ID=11
   InterconnectB: InterThreadMemcpy -ID=11
 Path: 2
-  Endpoints: node[1], node[3]
+  Endpoints: treeNode[1], treeNode[3]
   InterconnectA: InterProcessSocket -ID=12
   InterconnectB: InterProcessSocket -ID=12
+  # InterconnectA: Socket -client -IP=<server_ip_addr> -port=12345
+  # InterconnectB: Socket -server -IP=<local_ip_addr> -port=12345 -reuse
 Path: 3
-  Endpoints: node[1], node[4]
+  Endpoints: treeNode[1], treeNode[4]
   InterconnectA: InterProcessMemcpy -ID=13
   InterconnectB: InterProcessMemcpy -ID=13
+  # NOTE: Set the environment variable TAKYON_MULTICAST_IP=<local_ip_addr>, on both endpoints, if using -ID with Sockets.
+  # InterconnectA: Socket -client -IP=<server_ip_addr> -ID=13
+  # InterconnectB: Socket -server -IP=<local_ip_addr> -ID=13
 Path: 4
-  Endpoints: node[2], node[5]
+  Endpoints: treeNode[2], treeNode[5]
   InterconnectA: InterProcessSocket -ID=14
   InterconnectB: InterProcessSocket -ID=14
 Path: 5
-  Endpoints: node[2], node[6]
+  Endpoints: treeNode[2], treeNode[6]
   InterconnectA: InterProcessMemcpy -ID=15
   InterconnectB: InterProcessMemcpy -ID=15
 Path: 6
-  Endpoints: node[2], node[7]
+  Endpoints: treeNode[2], treeNode[7]
   InterconnectA: InterProcessMemcpy -ID=16
   InterconnectB: InterProcessMemcpy -ID=16
 Path: 7
-  Endpoints: node[4], node[8]
+  Endpoints: treeNode[4], treeNode[8]
   InterconnectA: InterProcessSocket -ID=17
   InterconnectB: InterProcessSocket -ID=17
 Path: 8
-  Endpoints: node[4], node[9]
+  Endpoints: treeNode[4], treeNode[9]
   InterconnectA: InterProcessSocket -ID=18
   InterconnectB: InterProcessSocket -ID=18
 Path: 9
-  Endpoints: node[5], node[10]
+  Endpoints: treeNode[5], treeNode[10]
   InterconnectA: InterProcessMemcpy -ID=19
   InterconnectB: InterProcessMemcpy -ID=19
 

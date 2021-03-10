@@ -37,13 +37,12 @@ Run:
       > ./connectionless
 
     Unicast experiments:
-      Terminal 1: > ./connectionless "UnicastSendSocket -IP=127.0.0.1 -port=12345" -endpointA
-      Terminal 2: > ./connectionless "UnicastRecvSocket -IP=127.0.0.1 -port=12345 -reuse"
+      Terminal 1: > ./connectionless "UnicastSendSocket -IP=<remote_ip_addr> -port=12345" -endpointA
+      Terminal 2: > ./connectionless "UnicastRecvSocket -IP=<local_ip_addr> -port=12345 -reuse"
 
     Multicast experiments:
-      !!! IMPORTANT: The IP addresses should be local interface IP addresses for both the sender and receiver
-      Terminal 1: > ./connectionless "MulticastSendSocket -IP=127.0.0.1 -group=239.1.2.3 -port=12345" -endpointA
-      Terminal 2: > ./connectionless "MulticastRecvSocket -IP=127.0.0.1 -group=239.1.2.3 -port=12345 -reuse"
+      Terminal 1: > ./connectionless "MulticastSendSocket -IP=<local_ip_addr> -group=239.1.2.3 -port=12345" -endpointA
+      Terminal 2: > ./connectionless "MulticastRecvSocket -IP=<local_ip_addr> -group=239.1.2.3 -port=12345 -reuse"
 
   Windows:
     Follow the same as above, but replace "./connectionless" with "connectionless"

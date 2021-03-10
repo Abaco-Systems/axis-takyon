@@ -47,10 +47,13 @@ Path: 2
   InterconnectB: InterProcessMemcpy -ID=1
 Path: 3
   Endpoints: pipe[3], pipe[4]
-#  InterconnectA: Socket -client -IP=127.0.0.1 -port=12345
-#  InterconnectB: Socket -server -IP=127.0.0.1 -port=12345 -reuse
-  InterconnectA: Socket -client -IP=127.0.0.1 -ID=1
-  InterconnectB: Socket -server -IP=127.0.0.1 -ID=1
+  InterconnectA: Socket -client -IP=127.0.0.1 -port=12345
+  InterconnectB: Socket -server -IP=127.0.0.1 -port=12345 -reuse
+#  InterconnectA: Socket -client -IP=<server_ip_addr> -port=12345
+#  InterconnectB: Socket -server -IP=<local_ip_addr> -port=12345 -reuse
+# NOTE: Set the environment variable TAKYON_MULTICAST_IP=<local_ip_addr>, on both endpoints, if using -ID with Sockets.
+#  InterconnectA: Socket -client -IP=<server_ip_addr> -ID=1
+#  InterconnectB: Socket -server -IP=<local_ip_addr> -ID=1
 
 Collectives
 Collective: pipeline

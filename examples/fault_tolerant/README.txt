@@ -62,11 +62,13 @@ Run:
       Terminal1: > ./fault_tolerant "InterProcessSocket -ID=1" -errors -endpointA -poll
       Terminal2: > ./fault_tolerant "InterProcessSocket -ID=1 -reuse" -errors -poll
 
-      Terminal1: > ./fault_tolerant "Socket -client -IP=127.0.0.1 -port=12345" -errors -endpointA
-      Terminal2: > ./fault_tolerant "Socket -server -IP=127.0.0.1 -port=12345 -reuse" -errors
+      Terminal1: > ./fault_tolerant "Socket -client -IP=<server_ip_addr> -port=12345" -errors -endpointA
+      Terminal2: > ./fault_tolerant "Socket -server -IP=<local_ip_addr> -port=12345 -reuse" -errors
 
-      Terminal1: > ./fault_tolerant "Socket -client -IP=127.0.0.1 -ID=1" -errors -endpointA -poll
-      Terminal2: > ./fault_tolerant "Socket -server -IP=Any -ID=1" -errors -poll
+      Terminal1: > export TAKYON_MULTICAST_IP=<local_ip_addr>
+                 > ./fault_tolerant "Socket -client -IP=<server_ip_addr> -ID=1" -errors -endpointA -poll
+      Terminal2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
+                 > ./fault_tolerant "Socket -server -IP=Any -ID=1" -errors -poll
 
   Windows:
     Follow the same as above, but replace "./fault_tolerant" with "fault_tolerant"

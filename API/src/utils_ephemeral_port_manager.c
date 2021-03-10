@@ -23,7 +23,6 @@
 
 //#define DEBUG_MESSAGE
 //#define WARNING_MESSAGE
-#define MAX_ITEM_LIFESPAN_SECONDS 5.0
 #define REQUEST_TIMEOUT_NS 1000000 // 1 millisecond
 #define COND_WAIT_TIMEOUT_NS 1000000000 // 1 second
 #define CHECK_FOR_EXIT_TIMEOUT_NS (1000000000/4) // 1/4 second
@@ -38,7 +37,6 @@ typedef struct {
   bool in_use;
   uint32_t path_id;
   uint16_t ephemeral_port_number;
-  double timestamp;
   char interconnect_name[TAKYON_MAX_INTERCONNECT_CHARS];
 } EphemeralPortManagerItem;
 
@@ -85,6 +83,7 @@ static void addItem(const char *interconnect_name, uint32_t path_id, uint16_t ep
     if (item->in_use && item->path_id == path_id && strcmp(item->interconnect_name, interconnect_name)==0) {
       if (item->ephemeral_port_number != ephemeral_port_number) {
         // A path with the interconnect and ID might have been shut down and restarted
+        // Since this is creating a port number, overwrite the potentially stale port number
         item->ephemeral_port_number = ephemeral_port_number;
       }
       // Already in list
@@ -124,7 +123,6 @@ static void addItem(const char *interconnect_name, uint32_t path_id, uint16_t ep
   item->in_use = true;
   item->path_id = path_id;
   item->ephemeral_port_number = ephemeral_port_number;
-  item->timestamp = (double)((double)clockTimeNanoseconds() / NANOSECONDS_PER_SECOND_DOUBLE);
   strncpy(item->interconnect_name, interconnect_name, TAKYON_MAX_INTERCONNECT_CHARS-1);
   item->interconnect_name[TAKYON_MAX_INTERCONNECT_CHARS-1] = '\0';
 }
@@ -144,12 +142,10 @@ static void removeItem(const char *interconnect_name, uint32_t path_id) {
 #ifdef DEBUG_MESSAGE
   printf("Ephemeral port manager: removing item (interconnect='%s', path_id=%u)\n", interconnect_name, path_id);
 #endif
-  double curr_time = (double)((double)clockTimeNanoseconds() / NANOSECONDS_PER_SECOND_DOUBLE);
   for (uint32_t i=0; i<L_num_manager_items; i++) {
     EphemeralPortManagerItem *item = &L_manager_items[i];
     if (item->in_use) {
-      double lifespan = curr_time - item->timestamp;
-      if (lifespan > MAX_ITEM_LIFESPAN_SECONDS || (item->path_id == path_id && strcmp(item->interconnect_name, interconnect_name)==0)) {
+      if (item->path_id == path_id && strcmp(item->interconnect_name, interconnect_name)==0) {
         item->in_use = false;
       }
     }
@@ -257,7 +253,8 @@ static void *ephemeralPortMonitoringThread(void *user_arg) {
       }
       pthread_mutex_unlock(L_mutex);
     } else if (message.command == EPHEMERAL_PORT_CONNECTED) {
-      // Remove item from the list
+      // Remove item from the list: this message will go to all managers on the sub net, but no gaurantee it wont get dropped. Still need to locally remove at endpoints
+      // NOTE: This will be called by the endpoint that received the port number
       pthread_mutex_lock(L_mutex);
       removeItem(message.interconnect_name, message.path_id);
       pthread_mutex_unlock(L_mutex);
@@ -442,6 +439,7 @@ static void ephemeralPortManagerInitOnce(void) {
 #endif
 }
 
+// NOTE: Called once to init the manager thread
 void ephemeralPortManagerInit(uint64_t verbosity) {
   L_verbosity = verbosity;
 #ifdef USE_AT_EXIT_METHOD
@@ -485,6 +483,7 @@ void ephemeralPortManagerFinalize() {
 #endif
 }
 
+// NOTE: This is called by the endpoint that want's a port number
 uint16_t ephemeralPortManagerGet(const char *interconnect_name, uint32_t path_id, int64_t timeout_ns, bool *timed_out_ret, uint64_t verbosity, char *error_message) {
   if (L_verbosity & TAKYON_VERBOSITY_CREATE_DESTROY_MORE) {
     printf("Ephemeral port manager: asking for port for (interconnect='%s', path_id=%u)\n", interconnect_name, path_id);
@@ -560,8 +559,20 @@ uint16_t ephemeralPortManagerGet(const char *interconnect_name, uint32_t path_id
   return ephemeral_port_number;
 }
 
+// NOTE: This will be call by the creator of the port number
+void ephemeralPortManagerRemoveLocally(const char *interconnect_name, uint32_t path_id) {
+  // Remove the item locally since the socket creation is done with trying to create (succefully or not)
+  pthread_mutex_lock(L_mutex);
+  removeItem(interconnect_name, path_id);
+  pthread_mutex_unlock(L_mutex);
+}
+
+// NOTE: This is called by the receiver of the port number after the connection succesfully is made
 void ephemeralPortManagerRemove(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number) {
   pthread_mutex_lock(L_mutex);
+
+  // Remove the item locally in case the datagram is dropped or no loopback
+  removeItem(interconnect_name, path_id);
 
   EphemeralPortMessage message;
   message.command = EPHEMERAL_PORT_CONNECTED;
@@ -584,6 +595,7 @@ void ephemeralPortManagerRemove(const char *interconnect_name, uint32_t path_id,
   pthread_mutex_unlock(L_mutex);
 }
 
+// NOTE: This is called by the creator of the ephemeral port number
 void ephemeralPortManagerSet(const char *interconnect_name, uint32_t path_id, uint16_t ephemeral_port_number, uint64_t verbosity) {
   pthread_mutex_lock(L_mutex);
 
@@ -601,7 +613,7 @@ void ephemeralPortManagerSet(const char *interconnect_name, uint32_t path_id, ui
   bool timed_out = false;
   if (!socketDatagramSend(L_multicast_send_socket, L_multicast_send_socket_in_addr, &message, sizeof(EphemeralPortMessage), is_polling, heartbeat_timeout_ns, &timed_out, L_error_message)) {
 #ifdef WARNING_MESSAGE
-    fprintf(stderr, "Warning: Ephemeral port manager: Failed to multicast EPHEMERAL_PORT_CONNECTED command: %s\n", L_error_message);
+    fprintf(stderr, "Warning: Ephemeral port manager: Failed to multicast NEW_EPHEMERAL_PORT command: %s\n", L_error_message);
 #endif
     // Not a big deal since the port is in the database and a remote request will eventually get it to broadcast
   }

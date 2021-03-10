@@ -40,13 +40,15 @@ Run:
       Terminal 1: > ./hello "InterProcessSocket -ID=1" -endpointA
       Terminal 2: > ./hello "InterProcessSocket -ID=1"
 
-      # Uses ephemeral port number (assigned by system)
-      Terminal 1: > ./hello "Socket -client -IP=127.0.0.1 -ID=1" -endpointA
-      Terminal 2: > ./hello "Socket -server -IP=127.0.0.1 -ID=1"
-
       # Uses specific port number (assigned by user)
-      Terminal 1: > ./hello "Socket -client -IP=127.0.0.1 -port=12345" -endpointA
-      Terminal 2: > ./hello "Socket -server -IP=127.0.0.1 -port=12345 -reuse"
+      Terminal 1: > ./hello "Socket -client -IP=<server_ip_addr> -port=12345" -endpointA
+      Terminal 2: > ./hello "Socket -server -IP=<local_ip_addr> -port=12345 -reuse"
+
+      # Uses ephemeral port number (assigned by system)
+      Terminal 1: > export TAKYON_MULTICAST_IP=<local_ip_addr>
+                  > ./hello "Socket -client -IP=<server_ip_addr> -ID=1" -endpointA
+      Terminal 2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
+                  > ./hello "Socket -server -IP=<local_ip_addr> -ID=1"
 
   Windows:
     Follow the same as above, but replace "./hello" with "hello"

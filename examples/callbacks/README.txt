@@ -56,11 +56,13 @@ Run:
       Terminal 1: > ./callbacks "InterProcessSocket -ID=1" -endpointA -poll
       Terminal 2: > ./callbacks "InterProcessSocket -ID=1" -poll
 
-      Terminal 1: > ./callbacks "Socket -client -IP=127.0.0.1 -port=12345" -endpointA
-      Terminal 2: > ./callbacks "Socket -server -IP=127.0.0.1 -port=12345 -reuse"
+      Terminal 1: > ./callbacks "Socket -client -IP=<server_ip_addr> -port=12345" -endpointA
+      Terminal 2: > ./callbacks "Socket -server -IP=<local_ip_addr> -port=12345 -reuse"
 
-      Terminal 1: > ./callbacks "Socket -client -IP=127.0.0.1 -ID=1" -endpointA -poll
-      Terminal 2: > ./callbacks "Socket -server -IP=Any -ID=1" -poll
+      Terminal 1: > export TAKYON_MULTICAST_IP=<local_ip_addr>
+                  > ./callbacks "Socket -client -IP=<server_ip_addr> -ID=1" -endpointA -poll
+      Terminal 2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
+                  > ./callbacks "Socket -server -IP=Any -ID=1" -poll
 
   Windows:
     Follow the same as above, but replace "./callbacks" with "callbacks"

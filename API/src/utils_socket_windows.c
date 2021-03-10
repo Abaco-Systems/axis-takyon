@@ -1046,6 +1046,7 @@ bool socketCreateEphemeralTcpServer(const char *ip_addr, const char *interconnec
   if (timeout_ns >= 0) {
     if (!wait_for_socket_read_activity(listening_fd, timeout_ns, error_message)) {
       TAKYON_RECORD_ERROR(error_message, "Failed to listen for connection\n");
+      ephemeralPortManagerRemoveLocally(interconnect_name, path_id);
       closesocket(listening_fd);
       return false;
     }
@@ -1053,6 +1054,7 @@ bool socketCreateEphemeralTcpServer(const char *ip_addr, const char *interconnec
 
   // This blocks until a connection is acctual made
   TakyonSocket socket_fd = accept(listening_fd, NULL, NULL);
+  ephemeralPortManagerRemoveLocally(interconnect_name, path_id);
   if (socket_fd == INVALID_SOCKET) {
     TAKYON_RECORD_ERROR(error_message, "Could not accept TCP socket. sock_error=%d\n", WSAGetLastError());
     closesocket(listening_fd);
