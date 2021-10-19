@@ -21,13 +21,18 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
   return false;
 }
 
-GLOBAL_VISIBILITY bool tknIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
-  TAKYON_RECORD_ERROR(path->attrs.error_message, "tknIsSendFinished() is not yet implemented.\n");
+GLOBAL_VISIBILITY bool tknIsSent(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
+  TAKYON_RECORD_ERROR(path->attrs.error_message, "tknIsSent() is not yet implemented.\n");
   return false;
 }
 
 GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknRecv() is not yet implemented.\n");
+  return false;
+}
+
+GLOBAL_VISIBILITY bool tknPostRecv(TakyonPath *path, int buffer_index) {
+  TAKYON_RECORD_ERROR(path->attrs.error_message, "tknPostRecv() is not yet implemented.\n");
   return false;
 }
 
@@ -47,9 +52,10 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 //  - Make a call to this function in the file utils_shared_libraries.c in the function sharedLibraryGetInterconnectFunctionPointers()
 void setTemplateFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
-  private_path->tknSend = tknSend;
-  private_path->tknIsSendFinished = tknIsSendFinished;
-  private_path->tknRecv = tknRecv;
+  private_path->tknSend = tknSend;         // Use NULL if not supported
+  private_path->tknIsSent = tknIsSent;     // Use NULL if not supported
+  private_path->tknRecv = tknRecv;         // Use NULL if not supported
+  private_path->tknPostRecv = tknPostRecv; // Use NULL if not supported
   private_path->tknDestroy = tknDestroy;
 }
 #endif

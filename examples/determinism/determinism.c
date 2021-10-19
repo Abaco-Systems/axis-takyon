@@ -115,9 +115,9 @@ static void endpointTask(bool is_endpointA) {
       if (cycle == L_nprime_cycles) ave_start_time = start_time;
       // Send message
       if (L_validate_data) fillInTestData((uint8_t *)path->attrs.sender_addr_list[buffer], L_nbytes, cycle);
-      takyonSend(path, buffer, L_nbytes, 0, 0, NULL);
+      takyonSend(path, buffer, TAKYON_SEND_FLAGS_NONE, L_nbytes, 0, 0, NULL);
       // Wait for the data to return
-      takyonRecv(path, buffer, NULL, NULL, NULL);
+      takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       if (L_validate_data) verifyTestData((uint8_t *)path->attrs.recver_addr_list[buffer], L_nbytes, cycle);
       // Record results in histogram
       if (cycle >= L_nprime_cycles) {
@@ -151,10 +151,10 @@ static void endpointTask(bool is_endpointA) {
   } else {
     // Endpoint B: waits for a message and then sends it right back
     for (int cycle=0; cycle<L_ncycles+L_nprime_cycles; cycle++) {
-      takyonRecv(path, buffer, NULL, NULL, NULL);
+      takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       if (L_validate_data) verifyTestData((uint8_t *)path->attrs.recver_addr_list[buffer], L_nbytes, cycle);
       if (L_validate_data) fillInTestData((uint8_t *)path->attrs.sender_addr_list[buffer], L_nbytes, cycle);
-      takyonSend(path, buffer, L_nbytes, 0, 0, NULL);
+      takyonSend(path, buffer, TAKYON_SEND_FLAGS_NONE, L_nbytes, 0, 0, NULL);
       buffer = (buffer + 1) % L_nbufs;
     }
     printf("See endpoint A for results\n");

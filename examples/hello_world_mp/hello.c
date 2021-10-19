@@ -50,8 +50,6 @@ int main(int argc, char **argv) {
   attrs.recv_start_timeout          = TAKYON_WAIT_FOREVER;
   attrs.recv_finish_timeout         = TAKYON_WAIT_FOREVER;
   attrs.path_destroy_timeout        = TAKYON_WAIT_FOREVER;
-  attrs.send_completion_method      = TAKYON_BLOCKING;
-  attrs.recv_completion_method      = TAKYON_BLOCKING;
   attrs.nbufs_AtoB                  = 1;
   attrs.nbufs_BtoA                  = 1;
   uint64_t sender_max_bytes_list[1] = { 1024 };
@@ -69,14 +67,14 @@ int main(int argc, char **argv) {
   for (int i=0; i<5; i++) {
     if (is_endpointA) {
       strncpy((char *)path->attrs.sender_addr_list[0], message, path->attrs.sender_max_bytes_list[0]);
-      takyonSend(path, 0, strlen(message)+1, 0, 0, NULL);
-      takyonRecv(path, 0, NULL, NULL, NULL);
+      takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, strlen(message)+1, 0, 0, NULL);
+      takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       printf("Endpoint A received message %d: %s\n", i, (char *)path->attrs.recver_addr_list[0]);
     } else {
-      takyonRecv(path, 0, NULL, NULL, NULL);
+      takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       printf("Endpoint B received message %d: %s\n", i, (char *)path->attrs.recver_addr_list[0]);
       strncpy((char *)path->attrs.sender_addr_list[0], message, path->attrs.sender_max_bytes_list[0]);
-      takyonSend(path, 0, strlen(message)+1, 0, 0, NULL);
+      takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, strlen(message)+1, 0, 0, NULL);
     }
   }
 

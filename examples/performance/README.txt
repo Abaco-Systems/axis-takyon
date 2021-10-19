@@ -17,7 +17,7 @@ Build:
   Mac and Linux:
     Terminal:
       > export TAKYON_LIBS=<folder>  // e.g. $HOME/Takyon/API/builds/linux
-      > make
+      > make [WITH_RDMA=Yes]
       > make USE_STATIC_LIB=Yes      // Use static Takyon lib to avoid dynamic Takyon libs
   Windows:
     DOS Shell:
@@ -63,6 +63,9 @@ Run:
                   > ./performance "Socket -client -IP=<server_ip_addr> -ID=1" -endpointA -poll
       Terminal 2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
                   > ./performance "Socket -server -IP=Any -ID=1" -poll
+
+      Terminal 1: > ./performance "Rdma -server -IP=<local_ip_addr> -port=12345" -endpointA -poll -nbufs 10
+      Terminal 2: > ./performance "Rdma -client -IP=<server_ip_addr> -port=12345" -poll -nbufs 10
 
   Windows:
     Follow the same as above, but replace "./performance" with "performance"

@@ -19,14 +19,14 @@ void helloTask(TakyonGraph *graph, int group_id) {
   for (int i=0; i<5; i++) {
     if (is_endpointA) {
       strncpy((char *)path->attrs.sender_addr_list[0], message, path->attrs.sender_max_bytes_list[0]);
-      takyonSend(path, 0, strlen(message)+1, 0, 0, NULL);
-      takyonRecv(path, 0, NULL, NULL, NULL);
+      takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, strlen(message)+1, 0, 0, NULL);
+      takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       printf("Endpoint A received message %d: %s\n", i, (char *)path->attrs.recver_addr_list[0]);
     } else {
-      takyonRecv(path, 0, NULL, NULL, NULL);
+      takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       printf("Endpoint B received message %d: %s\n", i, (char *)path->attrs.recver_addr_list[0]);
       strncpy((char *)path->attrs.sender_addr_list[0], message, path->attrs.sender_max_bytes_list[0]);
-      takyonSend(path, 0, strlen(message)+1, 0, 0, NULL);
+      takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, strlen(message)+1, 0, 0, NULL);
     }
   }
 }

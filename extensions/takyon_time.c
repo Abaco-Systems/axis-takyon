@@ -87,9 +87,15 @@ double takyonTime() {
 #else // Linux
   static long long base_time;
   static int got_base_time = 0;
+#ifdef TAKTON_TIME_USE_CLOCK_GETTIME   // clock_gettime() has nanosecond precision
+  struct timespec curr_time;
+  clock_gettime(CLOCK_MONOTONIC, &curr_time); // CLOCK_MONOTONIC is only increasing
+  long long total_nanoseconds = ((long long)curr_time.tv_sec * 1000000000LL) + (long long)curr_time.tv_nsec;
+#else  // gettimeofday() only has microsecond precision but is more portable
   struct timeval tp;
   gettimeofday(&tp, NULL);
   long long total_nanoseconds = ((long long)tp.tv_sec * 1000000000LL) + (long long)(tp.tv_usec * 1000);
+#endif
   if (!got_base_time) {
     base_time = total_nanoseconds;
     got_base_time = 1;

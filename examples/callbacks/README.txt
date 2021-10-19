@@ -64,5 +64,8 @@ Run:
       Terminal 2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
                   > ./callbacks "Socket -server -IP=Any -ID=1" -poll
 
+      Terminal 1: > ./callbacks "Rdma -server -IP=<local_ip_addr> -port=12345" -endpointA
+      Terminal 2: > ./callbacks "Rdma -client -IP=<server_ip_addr> -port=12345"
+
   Windows:
     Follow the same as above, but replace "./callbacks" with "callbacks"

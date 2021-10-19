@@ -70,5 +70,8 @@ Run:
       Terminal2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
                  > ./fault_tolerant "Socket -server -IP=Any -ID=1" -errors -poll
 
+      Terminal 1: > ./fault_tolerant "Rdma -server -IP=<local_ip_addr> -port=12345" -errors -endpointA
+      Terminal 2: > ./fault_tolerant "Rdma -client -IP=<server_ip_addr> -port=12345" -errors
+
   Windows:
     Follow the same as above, but replace "./fault_tolerant" with "fault_tolerant"

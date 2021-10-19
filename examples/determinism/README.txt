@@ -16,7 +16,7 @@ Build:
   Mac and Linux:
     Terminal:
       > export TAKYON_LIBS=<folder>  // e.g. $HOME/Takyon/API/builds/linux
-      > make
+      > make [WITH_RDMA=Yes]
       > make USE_STATIC_LIB=Yes      // Use static Takyon lib to avoid dynamic Takyon libs
   Windows:
     DOS Shell:
@@ -63,6 +63,9 @@ Run:
                   > ./determinism "Socket -client -IP=<server_ip_addr> -ID=1" -endpointA -poll
       Terminal 2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
                   > ./determinism "Socket -server -IP=Any -ID=1" -poll
+
+      Terminal 1: > ./determinism "Rdma -server -IP=<local_ip_addr> -port=12345" -endpointA -usecsPerBucket 1 -poll
+      Terminal 2: > ./determinism "Rdma -client -IP=<server_ip_addr> -port=12345" -usecsPerBucket 1 -poll
 
   Windows:
     Follow the same as above, but replace "./determinism" with "determinism"

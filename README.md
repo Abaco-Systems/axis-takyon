@@ -366,11 +366,14 @@ Restrictions:
 ### UnicastRecvSocket
 Receive UDP datagrams to a single endpoint:
 ```
--IP=<IP> -port=<port> [-reuse]                (<IP> is the local IP inferface of this receiver.
-                                               -reuse is optional, and allows port number to be
-                                               reused without waiting in case of a failure.)
--IP=Any -port=<port> [-reuse]                 (Alternative, where IP address is auto detected
-                                               from activity on the port number)
+-IP=<IP> -port=<port> [-reuse] [-rcvbuf=<bytes>]  (<IP> is the local IP inferface of this receiver.
+                                                   -reuse is optional, and allows port number to be
+                                                   reused without waiting in case of a failure.
+                                                   -rcvbuf=<bytes> can be used to increase the kernel's
+                                                   receiver buffer size to help avoid dropping incoming
+                                                   packets.)
+-IP=Any -port=<port> [-reuse] [-rcvbuf=<bytes>]   (Alternative, where IP address is auto detected
+                                                   from activity on the port number)
 ```
 Restrictions:
 - Must be endpoint B.
@@ -408,12 +411,16 @@ Restrictions:
 ### MulticastRecvSocket
 Receive UDP datagrams from a multicast group:
 ```
--IP=<IP> -group=<gIP> -port=<port> [-reuse]   (<IP> is the local IP inferface of this receiver.
+-IP=<IP> -group=<gIP> -port=<port> [-reuse] [-rcvbuf=<bytes>]
+                                              (<IP> is the local IP inferface of this receiver.
                                                <gIP> is the IP multicast address between
                                                224.0.0.0 and 239.255.255.255; some of these
                                                adresses are reserved.
                                                -reuse is optional, and allows port number to be
-                                               reused without waiting in case of a failure.)
+                                               reused without waiting in case of a failure.
+                                               -rcvbuf=<bytes> can be used to increase the kernel's
+                                               receiver buffer size to help avoid dropping incoming
+                                               packets.)
 
 ```
 Restrictions:

@@ -33,9 +33,10 @@ typedef struct {
 
   // Virtual functions that are resolved from a shared object loaded at runtime
   bool (*tknCreate)(TakyonPath *path);
-  bool (*tknSend)(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret);
-  bool (*tknIsSendFinished)(TakyonPath *path, int buffer_index, bool *timed_out_ret);
-  bool (*tknRecv)(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret);
+  bool (*tknSend)(TakyonPath *path, int buffer_index, TakyonSendFlagsMask flags, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret);
+  bool (*tknIsSent)(TakyonPath *path, int buffer_index, bool *timed_out_ret);
+  bool (*tknPostRecv)(TakyonPath *path, int buffer_index);
+  bool (*tknRecv)(TakyonPath *path, int buffer_index, TakyonRecvFlagsMask flags, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret);
   bool (*tknDestroy)(TakyonPath *path);
 
   // For each interconnect's specific values
@@ -165,6 +166,7 @@ extern bool socketDatagramRecv(TakyonSocket socket_fd, void *data_ptr, size_t bu
 
 // Helpful socket functions
 extern bool socketSetBlocking(TakyonSocket socket_fd, bool is_blocking, char *error_message);
+extern bool socketSetKernelRecvBufferingSize(TakyonSocket socket_fd, int bytes, char *error_message); // Helpful to avoid dropping packets on receiver
 extern bool socketWaitForDisconnectActivity(TakyonSocket socket_fd, int read_pipe_fd, bool *got_socket_activity_ret, char *error_message);
 extern bool socketBarrier(bool is_client, TakyonSocket socket_fd, int barrier_id, int64_t timeout_ns, char *error_message);
 extern bool socketSwapAndVerifyInt(TakyonSocket socket_fd, int value, int64_t timeout_ns, char *error_message);

@@ -95,7 +95,7 @@ static void printTransferDetails(int is_endpointA, LifeCycleStats *my_stats) {
 
 static bool sendData(TakyonPath *path, uint64_t bytes, LifeCycleStats *stats) {
   bool timed_out;
-  bool connection_ok = takyonSend(path, 0, bytes, 0, 0, &timed_out);
+  bool connection_ok = takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, bytes, 0, 0, &timed_out);
   if (!connection_ok || timed_out) {
     if (!connection_ok) {
       stats->send_failures++;
@@ -115,7 +115,7 @@ static bool sendData(TakyonPath *path, uint64_t bytes, LifeCycleStats *stats) {
 
 static bool recvData(TakyonPath *path, LifeCycleStats *stats) {
   bool timed_out;
-  bool connection_ok = takyonRecv(path, 0, NULL, NULL, &timed_out);
+  bool connection_ok = takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, &timed_out);
   if (!connection_ok || timed_out) {
     if (!connection_ok) {
       stats->recv_failures++;

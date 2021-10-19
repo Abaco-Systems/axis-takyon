@@ -50,8 +50,6 @@ TakyonPathAttributes takyonAllocAttributes(bool is_endpointA, bool is_polling, i
   attrs.recv_start_timeout     = timeout;
   attrs.recv_finish_timeout    = timeout;
   attrs.path_destroy_timeout   = timeout;
-  attrs.send_completion_method = TAKYON_BLOCKING;
-  attrs.recv_completion_method = TAKYON_BLOCKING;
   attrs.nbufs_AtoB             = nbufs_AtoB;
   attrs.nbufs_BtoA             = nbufs_BtoA;
   attrs.sender_max_bytes_list  = sender_max_bytes_list;

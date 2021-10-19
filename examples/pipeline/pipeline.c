@@ -29,35 +29,37 @@ void pipelineTask(TakyonGraph *graph, int group_id, int ncycles) {
     if (pipe_index == 0) {
       // Start of the pipeline
       // Wait for sync (permission to send data)
-      if (i > 0) { takyonRecv(src_path, 0, NULL, NULL, NULL); }
+      if (i > 0) { takyonRecv(src_path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL); }
       // Fill the data
       uint8_t *send_addr = (uint8_t *)src_path->attrs.sender_addr_list[buffer];
       for (uint64_t j=0; j<bytes; j++) { send_addr[j] = (uint8_t)(j+ncycles); }
       // Send the data
-      takyonSend(src_path, buffer, bytes, 0, 0, NULL);
-      if (src_path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) takyonIsSendFinished(src_path, buffer, NULL);
+      TakyonSendFlagsMask send_flags = src_path->attrs.IsSent_supported ? TAKYON_SEND_FLAGS_NON_BLOCKING : TAKYON_SEND_FLAGS_NONE;
+      takyonSend(src_path, buffer, send_flags, bytes, 0, 0, NULL);
+      if (src_path->attrs.IsSent_supported) takyonIsSent(src_path, buffer, NULL);
 
     } else if (pipe_index < collective->npaths) {
       // Intermediate thread in the pipeline
       uint8_t *send_addr = (uint8_t *)src_path->attrs.sender_addr_list[buffer];
       uint8_t *recv_addr = (uint8_t *)dest_path->attrs.recver_addr_list[buffer];
       // Wait for data
-      takyonRecv(dest_path, buffer, NULL, NULL, NULL);
+      takyonRecv(dest_path, buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       // Modify the data
       for (uint64_t j=0; j<bytes; j++) { send_addr[j] = recv_addr[j]+1; recv_addr[j] = 0; }
       // Send the sync to the previous thread to allow more data to be sent
-      if (i < (ncycles-1)) { takyonSend(dest_path, 0, 0, 0, 0, NULL); }
+      if (i < (ncycles-1)) { takyonSend(dest_path, 0, TAKYON_SEND_FLAGS_NONE, 0, 0, 0, NULL); }
       // Wait for sync (permission to send data)
-      if (i > 0) { takyonRecv(src_path, 0, NULL, NULL, NULL); }
+      if (i > 0) { takyonRecv(src_path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL); }
       // Send the data
-      takyonSend(src_path, buffer, bytes, 0, 0, NULL);
-      if (src_path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) takyonIsSendFinished(src_path, buffer, NULL);
+      TakyonSendFlagsMask send_flags = src_path->attrs.IsSent_supported ? TAKYON_SEND_FLAGS_NON_BLOCKING : TAKYON_SEND_FLAGS_NONE;
+      takyonSend(src_path, buffer, send_flags, bytes, 0, 0, NULL);
+      if (src_path->attrs.IsSent_supported) takyonIsSent(src_path, buffer, NULL);
 
     } else {
       // End of pipeline
       uint8_t *recv_addr = (uint8_t *)dest_path->attrs.recver_addr_list[buffer];
       // Wait for data
-      takyonRecv(dest_path, buffer, NULL, NULL, NULL);
+      takyonRecv(dest_path, buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       // Verify the results
       for (uint64_t j=0; j<bytes; j++) {
         uint8_t expected = (uint8_t)(j + ncycles + (collective->npaths-1));
@@ -68,7 +70,7 @@ void pipelineTask(TakyonGraph *graph, int group_id, int ncycles) {
         recv_addr[j] = 0;
       }
       // Send the sync to the previous thread to allow more data to be sent
-      if (i < (ncycles-1)) { takyonSend(dest_path, 0, 0, 0, 0, NULL); }
+      if (i < (ncycles-1)) { takyonSend(dest_path, 0, TAKYON_SEND_FLAGS_NONE, 0, 0, 0, NULL); }
     }
 
     buffer = (buffer + 1) % nbufs;

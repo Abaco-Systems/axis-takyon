@@ -59,7 +59,7 @@ void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
 
   // If parent exists, wait for a signal
   if (collective->parent_path != NULL) {
-    ok = takyonRecv(collective->parent_path, buffer, NULL, NULL, &timed_out);
+    ok = takyonRecv(collective->parent_path, buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);
@@ -73,7 +73,7 @@ void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
   // If have children, send a signal, then wait for a response
   for (int i=0; i<collective->nchildren; i++) {
     // Send signal
-    ok = takyonSend(collective->child_path_list[i], buffer, 0, 0, 0, &timed_out);
+    ok = takyonSend(collective->child_path_list[i], buffer, TAKYON_SEND_FLAGS_NONE, 0, 0, 0, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): path index %d timed out.\n", __FUNCTION__, i);
       exit(EXIT_FAILURE);
@@ -85,7 +85,7 @@ void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
   }
   for (int i=0; i<collective->nchildren; i++) {
     // Wait for response
-    ok = takyonRecv(collective->child_path_list[i], buffer, NULL, NULL, &timed_out);
+    ok = takyonRecv(collective->child_path_list[i], buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);
@@ -99,7 +99,7 @@ void takyonBarrierRun(TakyonCollectiveBarrier *collective, int buffer) {
   // If parent exists, send a response
   if (collective->parent_path != NULL) {
     // Send signal
-    ok = takyonSend(collective->parent_path, buffer, 0, 0, 0, &timed_out);
+    ok = takyonSend(collective->parent_path, buffer, TAKYON_SEND_FLAGS_NONE, 0, 0, 0, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);
@@ -166,7 +166,7 @@ static void takyonReduceRun(TakyonCollectiveReduce *collective, int buffer, uint
   for (int i=0; i<collective->nchildren; i++) {
     // Wait for the data
     uint64_t bytes_received;
-    ok = takyonRecv(collective->child_path_list[i], buffer, &bytes_received, NULL, &timed_out);
+    ok = takyonRecv(collective->child_path_list[i], buffer, TAKYON_RECV_FLAGS_NONE, &bytes_received, NULL, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);
@@ -189,7 +189,7 @@ static void takyonReduceRun(TakyonCollectiveReduce *collective, int buffer, uint
   // If parent exists, send the reduced data
   if (collective->parent_path != NULL) {
     // Send reduced value which is already in the sender's buffer
-    ok = takyonSend(collective->parent_path, buffer, bytes_expected, 0, 0, &timed_out);
+    ok = takyonSend(collective->parent_path, buffer, TAKYON_SEND_FLAGS_NONE, bytes_expected, 0, 0, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);
@@ -209,7 +209,7 @@ static void takyonReduceRun(TakyonCollectiveReduce *collective, int buffer, uint
     // Pass the results from the root to all children
     if (collective->parent_path != NULL) {
       // Wait for data from the parent
-      ok = takyonRecv(collective->parent_path, buffer, NULL, NULL, &timed_out);
+      ok = takyonRecv(collective->parent_path, buffer, TAKYON_RECV_FLAGS_NONE, NULL, NULL, &timed_out);
       if (ok && timed_out) {
         fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
         exit(EXIT_FAILURE);
@@ -230,7 +230,7 @@ static void takyonReduceRun(TakyonCollectiveReduce *collective, int buffer, uint
         memcpy((void *)collective->child_path_list[i]->attrs.sender_addr_list[buffer], (void *)collective->parent_path->attrs.recver_addr_list[buffer], bytes_expected);
       }
       // Send the data to the child
-      ok = takyonSend(collective->child_path_list[i], buffer, bytes_expected, 0, 0, &timed_out);
+      ok = takyonSend(collective->child_path_list[i], buffer, TAKYON_SEND_FLAGS_NONE, bytes_expected, 0, 0, &timed_out);
       if (ok && timed_out) {
         fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
         exit(EXIT_FAILURE);
@@ -372,7 +372,8 @@ TakyonScatterDest *takyonScatterDestInit(int npaths, int path_index, TakyonPath 
 void takyonScatterSend(TakyonScatterSrc *collective, int buffer, uint64_t *nbytes_list, uint64_t *soffset_list, uint64_t *doffset_list) {
   for (int i=0; i<collective->npaths; i++) {
     bool timed_out;
-    bool ok = takyonSend(collective->path_list[i], buffer, nbytes_list[i], soffset_list[i], doffset_list[i], &timed_out);
+    TakyonSendFlagsMask send_flags = collective->path_list[i]->attrs.IsSent_supported ? TAKYON_SEND_FLAGS_NON_BLOCKING : TAKYON_SEND_FLAGS_NONE;
+    bool ok = takyonSend(collective->path_list[i], buffer, send_flags, nbytes_list[i], soffset_list[i], doffset_list[i], &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): path index %d timed out.\n", __FUNCTION__, i);
       exit(EXIT_FAILURE);
@@ -384,9 +385,9 @@ void takyonScatterSend(TakyonScatterSrc *collective, int buffer, uint64_t *nbyte
   }
   // If non blocking, then wait for completion
   for (int i=0; i<collective->npaths; i++) {
-    if (collective->path_list[i]->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
+    if (collective->path_list[i]->attrs.IsSent_supported) {
       bool timed_out;
-      bool ok = takyonIsSendFinished(collective->path_list[i], buffer, &timed_out);
+      bool ok = takyonIsSent(collective->path_list[i], buffer, &timed_out);
       if (ok && timed_out) {
         fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
         exit(EXIT_FAILURE);
@@ -401,7 +402,7 @@ void takyonScatterSend(TakyonScatterSrc *collective, int buffer, uint64_t *nbyte
 
 void takyonScatterRecv(TakyonScatterDest *collective, int buffer, uint64_t *nbytes_ret, uint64_t *offset_ret) {
   bool timed_out;
-  bool ok = takyonRecv(collective->path, buffer, nbytes_ret, offset_ret, &timed_out);
+  bool ok = takyonRecv(collective->path, buffer, TAKYON_RECV_FLAGS_NONE, nbytes_ret, offset_ret, &timed_out);
   if (ok && timed_out) {
     fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
     exit(EXIT_FAILURE);
@@ -479,7 +480,8 @@ TakyonGatherDest *takyonGatherDestInit(int npaths, TakyonPath **path_list) {
 
 void takyonGatherSend(TakyonGatherSrc *collective, int buffer, uint64_t nbytes, uint64_t soffset, uint64_t doffset) {
   bool timed_out;
-  bool ok = takyonSend(collective->path, buffer, nbytes, soffset, doffset, &timed_out);
+  TakyonSendFlagsMask send_flags = collective->path->attrs.IsSent_supported ? TAKYON_SEND_FLAGS_NON_BLOCKING : TAKYON_SEND_FLAGS_NONE;
+  bool ok = takyonSend(collective->path, buffer, send_flags, nbytes, soffset, doffset, &timed_out);
   if (ok && timed_out) {
     fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
     exit(EXIT_FAILURE);
@@ -489,8 +491,8 @@ void takyonGatherSend(TakyonGatherSrc *collective, int buffer, uint64_t nbytes, 
     exit(EXIT_FAILURE);
   }
   // If non blocking, then wait for completion
-  if (collective->path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
-    ok = takyonIsSendFinished(collective->path, buffer, &timed_out);
+  if (collective->path->attrs.IsSent_supported) {
+    ok = takyonIsSent(collective->path, buffer, &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);
@@ -505,7 +507,7 @@ void takyonGatherSend(TakyonGatherSrc *collective, int buffer, uint64_t nbytes, 
 void takyonGatherRecv(TakyonGatherDest *collective, int buffer, uint64_t *nbytes_list_ret, uint64_t *offset_list_ret) {
   for (int i=0; i<collective->npaths; i++) {
     bool timed_out;
-    bool ok = takyonRecv(collective->path_list[i], buffer, &nbytes_list_ret[i], &offset_list_ret[i], &timed_out);
+    bool ok = takyonRecv(collective->path_list[i], buffer, TAKYON_RECV_FLAGS_NONE, &nbytes_list_ret[i], &offset_list_ret[i], &timed_out);
     if (ok && timed_out) {
       fprintf(stderr, "%s(): timed out.\n", __FUNCTION__);
       exit(EXIT_FAILURE);

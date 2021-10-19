@@ -32,7 +32,6 @@ typedef struct {
 #endif
   size_t sender_addr;
   size_t recver_addr;
-  bool send_started;
   volatile bool got_data;
   uint64_t bytes_recved;
   uint64_t offset_recved;
@@ -44,11 +43,17 @@ typedef struct {
   SingleBuffer *recv_buffer_list;
 } PathBuffers;
 
-GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
+GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, TakyonSendFlagsMask flags, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
   PathBuffers *buffers = (PathBuffers *)private_path->private_data;
   SingleBuffer *buffer = &buffers->send_buffer_list[buffer_index];
   InterThreadManagerItem *shared_item = buffers->shared_thread_item;
+
+  // Error check flags
+  if (flags != TAKYON_SEND_FLAGS_NONE) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect only supports send flags == TAKYON_SEND_FLAGS_NONE\n");
+    return false;
+  }
 
   // Lock the mutex now since many of the variables come from the remote side
   pthread_mutex_lock(&shared_item->mutex);
@@ -57,14 +62,6 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
   if (shared_item->connection_broken) {
     pthread_mutex_unlock(&shared_item->mutex);
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Remote side has failed\n");
-    return false;
-  }
-
-  // Check if waiting on a takyonIsSendFinished()
-  if (buffer->send_started) {
-    interThreadManagerMarkConnectionAsBad(shared_item);
-    pthread_mutex_unlock(&shared_item->mutex);
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "A previous send on buffer %d was started, but takyonIsSendFinished() was not called\n", buffer_index);
     return false;
   }
 
@@ -97,7 +94,6 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
     memcpy(remote_addr, sender_addr, bytes);
 #endif
   }
-  buffer->send_started = true;
 
   // Fill in the remote recv info
   remote_buffer->bytes_recved = bytes;
@@ -111,55 +107,21 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
   // Done with remote variables
   pthread_mutex_unlock(&shared_item->mutex);
 
-  // Handle completion
-  if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
-    buffer->send_started = false;
-  } else if (path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
-    // Nothing to do
-  }
-
   return true;
 }
 
-GLOBAL_VISIBILITY bool tknIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
-  PathBuffers *buffers = (PathBuffers *)private_path->private_data;
-  SingleBuffer *buffer = &buffers->send_buffer_list[buffer_index];
-  InterThreadManagerItem *shared_item = buffers->shared_thread_item;
-
-  // Lock the mutex now since many of the variables come from the remote side
-  pthread_mutex_lock(&shared_item->mutex);
-
-  // Verify connection is good
-  if (shared_item->connection_broken) {
-    pthread_mutex_unlock(&shared_item->mutex);
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Remote side has failed\n");
-    return false;
-  }
-
-  // Verify no double writes
-  if (!buffer->send_started) {
-    interThreadManagerMarkConnectionAsBad(shared_item);
-    pthread_mutex_unlock(&shared_item->mutex);
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonIsSendFinished() was called, but a prior takyonSend() was not called on buffer %d\n", buffer_index);
-    return false;
-  }
-
-  // Since this interconnect can't be non-blocking, the transfer is complete.
-  // Mark the transfer as complete.
-  buffer->send_started = false;
-
-  pthread_mutex_unlock(&shared_item->mutex);
-
-  return true;
-}
-
-GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
+GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, TakyonRecvFlagsMask flags, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
   PathBuffers *buffers = (PathBuffers *)private_path->private_data;
   SingleBuffer *buffer = &buffers->recv_buffer_list[buffer_index];
   int64_t time1 = 0;
   InterThreadManagerItem *shared_item = buffers->shared_thread_item;
+
+  // Error check flags
+  if (flags != TAKYON_RECV_FLAGS_NONE) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect only supports recv flags == TAKYON_RECV_FLAGS_NONE\n");
+    return false;
+  }
 
   if (path->attrs.is_polling) {
     time1 = clockTimeNanoseconds();
@@ -548,7 +510,8 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 void setInterThreadMemcpyFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
   private_path->tknSend = tknSend;
-  private_path->tknIsSendFinished = tknIsSendFinished;
+  private_path->tknIsSent = NULL;
+  private_path->tknPostRecv = NULL;
   private_path->tknRecv = tknRecv;
   private_path->tknDestroy = tknDestroy;
 }

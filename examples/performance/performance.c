@@ -20,7 +20,7 @@ static char    *L_interconnect      = NULL;
 static bool     L_is_multi_threaded = false;
 static bool     L_is_polling        = false;
 static int      L_nbufs             = 1;
-static uint64_t L_max_bytes         = 1024*1024*4;
+static uint64_t L_max_bytes         = 1024*1024;
 static uint64_t L_min_bytes         = 0;
 static int      L_ncycles           = 100;
 static int      L_nprime_cycles     = 1;
@@ -97,15 +97,16 @@ static void testThroughput(TakyonPath *path) {
         if (cycle==L_nprime_cycles) time1 = takyonTime();
         for (int buffer=0; buffer<L_nbufs; buffer++) {
           if (L_validate_data) fillInTestData((uint8_t *)path->attrs.sender_addr_list[buffer], bytes, cycle);
-          takyonSend(path, buffer, bytes, 0, 0, NULL);
+          TakyonSendFlagsMask send_flags = path->attrs.IsSent_supported ? TAKYON_SEND_FLAGS_NON_BLOCKING : TAKYON_SEND_FLAGS_NONE;
+          takyonSend(path, buffer, send_flags, bytes, 0, 0, NULL);
         }
-        if (path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
+        if (path->attrs.IsSent_supported) {
           for (int buffer=0; buffer<L_nbufs; buffer++) {
-            takyonIsSendFinished(path, buffer, NULL);
+            takyonIsSent(path, buffer, NULL);
           }
         }
         // Get sync signal to know all buffers are ready again
-        takyonRecv(path, 0, NULL, NULL, NULL);
+        takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       }
       double elapsed_seconds = takyonTime()-time1;
       double total_Mbytes = ((double)bytes * L_ncycles * L_nbufs) / 1000000.0;
@@ -117,11 +118,11 @@ static void testThroughput(TakyonPath *path) {
       for (int cycle=0; cycle<L_ncycles+L_nprime_cycles; cycle++) {
         for (int buffer=0; buffer<L_nbufs; buffer++) {
           uint64_t bytes_received, offset;
-          takyonRecv(path, buffer, &bytes_received, &offset, NULL);
+          takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, &bytes_received, &offset, NULL);
           if (L_validate_data) verifyTestData((uint8_t *)path->attrs.recver_addr_list[buffer], bytes, cycle, bytes_received, offset);
         }
         // Send synchronization message (zero bytes in message)
-        takyonSend(path, 0, 0, 0, 0, NULL);
+        takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, 0, 0, 0, NULL);
       }
     }
 
@@ -142,9 +143,9 @@ static void testLatency(TakyonPath *path) {
       for (int cycle=0; cycle<L_ncycles+L_nprime_cycles; cycle++) {
         if (cycle==L_nprime_cycles) time1 = takyonTime();
         if (L_validate_data) fillInTestData((uint8_t *)path->attrs.sender_addr_list[buffer], bytes, cycle);
-        takyonSend(path, buffer, bytes, 0, 0, NULL);
+        takyonSend(path, buffer, TAKYON_SEND_FLAGS_NONE, bytes, 0, 0, NULL);
         uint64_t bytes_received, offset;
-        takyonRecv(path, buffer, &bytes_received, &offset, NULL);
+        takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, &bytes_received, &offset, NULL);
         if (L_validate_data) verifyTestData((uint8_t *)path->attrs.recver_addr_list[buffer], bytes, cycle, bytes_received, offset);
         buffer = (buffer+1) % L_nbufs;
       }
@@ -157,10 +158,10 @@ static void testLatency(TakyonPath *path) {
       // Endpoint B: waits for a message and then sends it right back
       for (int cycle=0; cycle<L_ncycles+L_nprime_cycles; cycle++) {
         uint64_t bytes_received, offset;
-        takyonRecv(path, buffer, &bytes_received, &offset, NULL);
+        takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, &bytes_received, &offset, NULL);
         if (L_validate_data) verifyTestData((uint8_t *)path->attrs.recver_addr_list[buffer], bytes, cycle, bytes_received, offset);
         if (L_validate_data) fillInTestData((uint8_t *)path->attrs.sender_addr_list[buffer], bytes, cycle);
-        takyonSend(path, buffer, bytes, 0, 0, NULL);
+        takyonSend(path, buffer, TAKYON_SEND_FLAGS_NONE, bytes, 0, 0, NULL);
         buffer = (buffer+1) % L_nbufs;
       }
     }
@@ -206,7 +207,7 @@ static void endpointTask(bool is_endpointA) {
 
   // Throughput
   if (L_test_throughput) {
-    attrs.send_completion_method = is_endpointA ? TAKYON_USE_IS_SEND_FINISHED : TAKYON_BLOCKING;
+    /*+ support non blocking? */
     TakyonPath *throughput_path = takyonCreate(&attrs);
     if (is_endpointA) {
       printf("\nThroughput\n");

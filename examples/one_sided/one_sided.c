@@ -89,11 +89,11 @@ int main(int argc, char **argv) {
     uint64_t bytes_to_recv = bytes; // IMPORTANT: Since this is one sided, must tell takyonRecv() how many bytes to receive
     uint64_t data_offset = 0;       // IMPORTANT: Since this is one sided, must tell takyonRecv() where to place the data in the transport buffer
     if (is_endpointA) {
-      takyonSend(path, buffer, bytes, 0, 0, NULL);
-      takyonRecv(path, buffer, &bytes_to_recv, &data_offset, NULL);
+      takyonSend(path, buffer, TAKYON_SEND_FLAGS_NONE, bytes, 0, 0, NULL);
+      takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, &bytes_to_recv, &data_offset, NULL);
     } else {
-      takyonRecv(path, buffer, &bytes_to_recv, &data_offset, NULL);
-      takyonSend(path, buffer, bytes, 0, 0, NULL);
+      takyonRecv(path, buffer, TAKYON_RECV_FLAGS_NONE, &bytes_to_recv, &data_offset, NULL);
+      takyonSend(path, buffer, TAKYON_SEND_FLAGS_NONE, bytes, 0, 0, NULL);
     }
     buffer = (buffer + 1) % nbufs;
   }

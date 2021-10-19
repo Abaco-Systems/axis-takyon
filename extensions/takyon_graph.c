@@ -18,6 +18,31 @@
 #define MAX_VALUE_BYTES 100000
 //#define DEBUG_MESSAGE
 
+#define MAX_PARAM_CHARS 30
+#define NUM_DEFAULT_PARAMS 15
+#define NUM_PATH_PARAMS (NUM_DEFAULT_PARAMS+1)
+typedef enum {
+  PARAM_TYPE_BOOL,
+  PARAM_TYPE_INT,
+  PARAM_TYPE_GROUP_INSTANCE,
+  PARAM_TYPE_UINT64,
+  PARAM_TYPE_DOUBLE,
+  PARAM_TYPE_UINT64_LIST,
+  PARAM_TYPE_ADDR_LIST,
+} ParamType;
+
+typedef struct {
+  char name[MAX_PARAM_CHARS];
+  ParamType type;
+  bool boolA, boolB;
+  int intA, intB;
+  uint64_t uint64A, uint64B;
+  double doubleA, doubleB;
+  int listA_count, listB_count;
+  uint64_t *uint64_listA, *uint64_listB;
+  size_t *addr_listA, *addr_listB;
+} PathParam;
+
 static char *loadFile(const char *filename) {
   // Open file
   FILE *fp = fopen(filename, "rb");
@@ -364,18 +389,6 @@ static double getDoubleValue(const char *data, int line_count) {
     exit(EXIT_FAILURE);
   }
   return number;
-}
-
-static TakyonCompletionMethod getCompletionMethod(const char *data, int line_count) {
-  if (strcmp(data, "TAKYON_BLOCKING")==0) {
-    return TAKYON_BLOCKING;
-  } else if (strcmp(data, "TAKYON_USE_IS_SEND_FINISHED")==0) {
-    return TAKYON_USE_IS_SEND_FINISHED;
-  } else {
-    fprintf(stderr, "Line %d: Expected 'TAKYON_BLOCKING' or 'TAKYON_USE_IS_SEND_FINISHED' but got '%s'\n", line_count, data);
-    exit(EXIT_FAILURE);
-  }
-  return TAKYON_BLOCKING;
 }
 
 static void getCollectivePathList(TakyonGraph *graph, char *data, int *count_ret, TakyonCollectiveConnection **collective_path_list_ret, int line_count) {
@@ -956,33 +969,6 @@ static char *parseCollectives(TakyonGraph *graph, char *data_ptr, char *keyword,
   return data_ptr;
 }
 
-#define MAX_PARAM_CHARS 30
-#define NUM_DEFAULT_PARAMS 17
-#define NUM_PATH_PARAMS (NUM_DEFAULT_PARAMS+1)
-typedef enum {
-  PARAM_TYPE_BOOL,
-  PARAM_TYPE_INT,
-  PARAM_TYPE_GROUP_INSTANCE,
-  PARAM_TYPE_UINT64,
-  PARAM_TYPE_DOUBLE,
-  PARAM_TYPE_COMPLETION_METHOD,
-  PARAM_TYPE_UINT64_LIST,
-  PARAM_TYPE_ADDR_LIST,
-} ParamType;
-
-typedef struct {
-  char name[MAX_PARAM_CHARS];
-  ParamType type;
-  bool boolA, boolB;
-  int intA, intB;
-  uint64_t uint64A, uint64B;
-  double doubleA, doubleB;
-  TakyonCompletionMethod completetionA, completetionB;
-  int listA_count, listB_count;
-  uint64_t *uint64_listA, *uint64_listB;
-  size_t *addr_listA, *addr_listB;
-} PathParam;
-
 static void setParamDefaultValueBool(PathParam *param, const char *name, bool value) {
   strcpy(param->name, name);
   param->type = PARAM_TYPE_BOOL;
@@ -1016,13 +1002,6 @@ static void setParamDefaultValueDouble(PathParam *param, const char *name, doubl
   param->type = PARAM_TYPE_DOUBLE;
   param->doubleA = value;
   param->doubleB = value;
-}
-
-static void setParamDefaultValueCompletionMethod(PathParam *param, const char *name, TakyonCompletionMethod value) {
-  strcpy(param->name, name);
-  param->type = PARAM_TYPE_COMPLETION_METHOD;
-  param->completetionA = value;
-  param->completetionB = value;
 }
 
 static void setParamDefaultValueUInt64List(PathParam *param, const char *name, uint64_t value) {
@@ -1114,9 +1093,6 @@ static void updateParam(TakyonGraph *graph, PathParam *param, char *value, int l
   } else if (param->type == PARAM_TYPE_DOUBLE) {
     param->doubleA = getDoubleValue(valueA, line_count);
     param->doubleB = getDoubleValue(valueB, line_count);
-  } else if (param->type == PARAM_TYPE_COMPLETION_METHOD) {
-    param->completetionA = getCompletionMethod(valueA, line_count);
-    param->completetionB = getCompletionMethod(valueB, line_count);
   } else if (param->type == PARAM_TYPE_UINT64_LIST) {
     // Since values are allowed to be specified more than once, onlt the last one take precedence, so free up any previous values
     if (param->uint64_listA != NULL) free(param->uint64_listA);
@@ -1159,9 +1135,6 @@ static void copyParams(PathParam *dest_params, PathParam *src_params, int num_pa
     } else if (dest_params[i].type == PARAM_TYPE_DOUBLE) {
       dest_params[i].doubleA = src_params[i].doubleA;
       dest_params[i].doubleB = src_params[i].doubleB;
-    } else if (dest_params[i].type == PARAM_TYPE_COMPLETION_METHOD) {
-      dest_params[i].completetionA = src_params[i].completetionA;
-      dest_params[i].completetionB = src_params[i].completetionB;
     } else if (dest_params[i].type == PARAM_TYPE_UINT64_LIST) {
       dest_params[i].listA_count = src_params[i].listA_count;
       dest_params[i].listB_count = src_params[i].listB_count;
@@ -1260,10 +1233,6 @@ static void copyParamsToPathAttributes(TakyonPathAttributes *attrs, bool is_endp
       attrs->recv_finish_timeout = is_endpointA ? param->doubleA : param->doubleB;
     } else if (strcmp(param->name, "PathDestroyTimeout:") == 0) {
       attrs->path_destroy_timeout = is_endpointA ? param->doubleA : param->doubleB;
-    } else if (strcmp(param->name, "SendCompletionMethod:") == 0) {
-      attrs->send_completion_method = is_endpointA ? param->completetionA : param->completetionB;
-    } else if (strcmp(param->name, "RecvCompletionMethod:") == 0) {
-      attrs->recv_completion_method = is_endpointA ? param->completetionA : param->completetionB;
     } else if (strcmp(param->name, "NBufsAtoB:") == 0) {
       attrs->nbufs_AtoB = is_endpointA ? param->intA : param->intB;
     } else if (strcmp(param->name, "NBufsBtoA:") == 0) {
@@ -1286,6 +1255,11 @@ static void copyParamsToPathAttributes(TakyonPathAttributes *attrs, bool is_endp
 static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char *value, int *line_count_ret) {
   int line_count = *line_count_ret;
 
+  if (NUM_DEFAULT_PARAMS != 15) {
+    fprintf(stderr, "%s(): Expected NUM_DEFAULT_PARAMS to be 15 but is %d\n", __FUNCTION__, NUM_DEFAULT_PARAMS);
+    exit(EXIT_FAILURE);
+  }
+
   PathParam default_params[NUM_DEFAULT_PARAMS];
   memset(default_params, 0, NUM_DEFAULT_PARAMS*sizeof(PathParam));
   setParamDefaultValueBool(&default_params[0], "IsPolling:", false);
@@ -1297,14 +1271,12 @@ static char *parsePaths(TakyonGraph *graph, char *data_ptr, char *keyword, char 
   setParamDefaultValueDouble(&default_params[6], "RecvStartTimeout:", TAKYON_WAIT_FOREVER);
   setParamDefaultValueDouble(&default_params[7], "RecvFinishTimeout:", TAKYON_WAIT_FOREVER);
   setParamDefaultValueDouble(&default_params[8], "PathDestroyTimeout:", TAKYON_WAIT_FOREVER);
-  setParamDefaultValueCompletionMethod(&default_params[9], "SendCompletionMethod:", TAKYON_BLOCKING);
-  setParamDefaultValueCompletionMethod(&default_params[10], "RecvCompletionMethod:", TAKYON_BLOCKING);
-  setParamDefaultValueInt(&default_params[11], "NBufsAtoB:", 1);
-  setParamDefaultValueInt(&default_params[12], "NBufsBtoA:", 1);
-  setParamDefaultValueUInt64List(&default_params[13], "SenderMaxBytesList:", 0);
-  setParamDefaultValueUInt64List(&default_params[14], "RecverMaxBytesList:", 0);
-  setParamDefaultValueAddrList(&default_params[15], "SenderAddrList:", 0);
-  setParamDefaultValueAddrList(&default_params[16], "RecverAddrList:", 0);
+  setParamDefaultValueInt(&default_params[9], "NBufsAtoB:", 1);
+  setParamDefaultValueInt(&default_params[10], "NBufsBtoA:", 1);
+  setParamDefaultValueUInt64List(&default_params[11], "SenderMaxBytesList:", 0);
+  setParamDefaultValueUInt64List(&default_params[12], "RecverMaxBytesList:", 0);
+  setParamDefaultValueAddrList(&default_params[13], "SenderAddrList:", 0);
+  setParamDefaultValueAddrList(&default_params[14], "RecverAddrList:", 0);
 
   validateKey("Paths", data_ptr, keyword, line_count);
   data_ptr = getNextKeyValue(data_ptr, keyword, value, &line_count);
@@ -1557,8 +1529,6 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
       printf("      recv_start_timeout: %lf\n", path_desc->attrsA.recv_start_timeout);
       printf("      recv_finish_timeout: %lf\n", path_desc->attrsA.recv_finish_timeout);
       printf("      path_destroy_timeout: %lf\n", path_desc->attrsA.path_destroy_timeout);
-      printf("      send_completion_method: %s\n", (path_desc->attrsA.send_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
-      printf("      recv_completion_method: %s\n", (path_desc->attrsA.recv_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
       printf("      nbufs_AtoB: %d\n", path_desc->attrsA.nbufs_AtoB);
       printf("      nbufs_BtoA: %d\n", path_desc->attrsA.nbufs_BtoA);
       printf("      sender_max_bytes_list:");
@@ -1596,8 +1566,6 @@ TakyonGraph *takyonLoadGraphDescription(int process_id, const char *filename) {
       printf("      recv_start_timeout: %lf\n", path_desc->attrsB.recv_start_timeout);
       printf("      recv_finish_timeout: %lf\n", path_desc->attrsB.recv_finish_timeout);
       printf("      path_destroy_timeout: %lf\n", path_desc->attrsB.path_destroy_timeout);
-      printf("      send_completion_method: %s\n", (path_desc->attrsB.send_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
-      printf("      recv_completion_method: %s\n", (path_desc->attrsB.recv_completion_method == TAKYON_BLOCKING) ? "TAKYON_BLOCKING" : "TAKYON_USE_IS_SEND_FINISHED");
       printf("      nbufs_AtoB: %d\n", path_desc->attrsB.nbufs_AtoB);
       printf("      nbufs_BtoA: %d\n", path_desc->attrsB.nbufs_BtoA);
       printf("      sender_max_bytes_list:");

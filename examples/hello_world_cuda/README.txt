@@ -41,5 +41,9 @@ Run:
       Terminal 1: > ./hello 0 graph_mp_shared.txt
       Terminal 2: > ./hello 1 graph_mp_shared.txt
 
+    Multi-processor via RDMA
+      Terminal 1: > ./hello 0 graph_rdma.txt
+      Terminal 2: > ./hello 1 graph_rdma.txt
+
   Windows:
     Follow the same as above, but replace "./hello" with "hello"

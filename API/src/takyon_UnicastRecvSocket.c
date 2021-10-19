@@ -42,19 +42,15 @@ typedef struct {
   bool connection_failed;
 } PathBuffers;
 
-GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
-  TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonSend() is not supported with this interconnect\n");
-  return false;
-}
-
-GLOBAL_VISIBILITY bool tknIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
-  TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonIsSendFinished() is not supported with this interconnect\n");
-  return false;
-}
-
-GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
+GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, TakyonRecvFlagsMask flags, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
   PathBuffers *buffers = (PathBuffers *)private_path->private_data;
+
+  // Error check flags
+  if (flags != TAKYON_RECV_FLAGS_NONE) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect only supports recv flags == TAKYON_RECV_FLAGS_NONE\n");
+    return false;
+  }
 
   // Verify connection is still good
   if (buffers->connection_failed) {
@@ -143,7 +139,8 @@ GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
 
 GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   // Supported formats:
-  //   "UnicastRecvSocket -IP=<IP> -port=<port> [-reuse]"  // <IP> can be Any
+  //   "UnicastRecvSocket -IP=<IP> -port=<port> [-reuse] [-rcvbuf=<bytes>]"  // <IP> can be Any
+  //     -rcvbuf=<bytes> is used to give the kernel more buffering to help the receiver avoid dropping packets
 
   // Get interconnect params
   bool allow_reuse = argGetFlag(path->attrs.interconnect, "-reuse");
@@ -167,6 +164,17 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   if ((port_number < 1024) || (port_number > 65535)) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "port numbers need to be between 1024 and 65535\n");
     return false;
+  }
+
+  // Kernel recv bytes; used to avoid dropping packets
+  int num_kernel_buffer_bytes;
+  ok = argGetInt(path->attrs.interconnect, "-rcvbuf=", &num_kernel_buffer_bytes, &found, path->attrs.error_message);
+  if (!ok) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "optional interconnect argument incomplete: '-rcvbuf=<nbytes>'\n");
+    return false;
+  }
+  if (!found) {
+    num_kernel_buffer_bytes = 0;
   }
 
   // Validate the restricted attribute values
@@ -242,6 +250,15 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
     }
   }
 
+  // Allow datagrams to be buffered in the OS to avoid dropping packets
+  if (num_kernel_buffer_bytes > 0) {
+    if (!socketSetKernelRecvBufferingSize(buffers->socket_fd, num_kernel_buffer_bytes, path->attrs.error_message)) {
+      TAKYON_RECORD_ERROR(path->attrs.error_message, "Failed to set socket's SO_RCVBUF\n");
+      socketClose(buffers->socket_fd);
+      goto cleanup;
+    }
+  }
+
   return true;
 
  cleanup:
@@ -253,8 +270,9 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 #ifdef BUILD_STATIC_LIB
 void setUnicastRecvSocketFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
-  private_path->tknSend = tknSend;
-  private_path->tknIsSendFinished = tknIsSendFinished;
+  private_path->tknSend = NULL;
+  private_path->tknIsSent = NULL;
+  private_path->tknPostRecv = NULL;
   private_path->tknRecv = tknRecv;
   private_path->tknDestroy = tknDestroy;
 }

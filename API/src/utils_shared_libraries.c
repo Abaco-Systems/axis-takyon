@@ -241,7 +241,7 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
 #ifdef _WIN32
   typedef bool tknCreate(TakyonPath *);
   typedef bool tknSend(TakyonPath *, int, uint64_t, uint64_t, uint64_t, bool *);
-  typedef bool tknIsSendFinished(TakyonPath *, int, bool *);
+  typedef bool tknIsSent(TakyonPath *, int, bool *);
   typedef bool tknRecv(TakyonPath *, int, uint64_t *, uint64_t *, bool *);
   typedef bool tknDestroy(TakyonPath *);
 
@@ -257,10 +257,10 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'send()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
-  private_path->tknIsSendFinished = (tknIsSendFinished *)GetProcAddress(lib_handle, "tknIsSendFinished");
-  if (private_path->tknIsSendFinished == NULL) {
+  private_path->tknIsSent = (tknIsSent *)GetProcAddress(lib_handle, "tknIsSent");
+  if (private_path->tknIsSent == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknIsSendFinished()' in interconnect module '%s'.\n", interconnect_module);
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknIsSent()' in interconnect module '%s'.\n", interconnect_module);
     return false;
   }
   private_path->tknRecv = (tknRecv *)GetProcAddress(lib_handle, "tknRecv");
@@ -285,27 +285,41 @@ bool sharedLibraryGetInterconnectFunctionPointers(const char *interconnect_modul
     return false;
   }
   private_path->tknSend = dlsym(lib_handle, "tknSend");
+  /* No need to error check since it's OK if an interconnect does not support sending
   if (private_path->tknSend == NULL) {
     pthread_mutex_unlock(&L_mutex);
     TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknSend()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
-  private_path->tknIsSendFinished = dlsym(lib_handle, "tknIsSendFinished");
-  if (private_path->tknIsSendFinished == NULL) {
+  */
+  private_path->tknIsSent = dlsym(lib_handle, "tknIsSent");
+  /* No need to error check since it's OK if an interconnect does not support non blocking sends
+  if (private_path->tknIsSent == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknIsSendFinished()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknIsSent()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
+  */
+  private_path->tknPostRecv = dlsym(lib_handle, "tknPostRecv");
+  /* No need to error check since it's OK if an interconnect does not support posting receives
+  if (private_path->tknPostRecv == NULL) {
+    pthread_mutex_unlock(&L_mutex);
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknPostRecv()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    return false;
+  }
+  */
   private_path->tknRecv = dlsym(lib_handle, "tknRecv");
+  /* No need to error check since it's OK if an interconnect does not support receiving
   if (private_path->tknRecv == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'recv()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknRecv()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
+  */
   private_path->tknDestroy = dlsym(lib_handle, "tknDestroy");
   if (private_path->tknDestroy == NULL) {
     pthread_mutex_unlock(&L_mutex);
-    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'destroy()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
+    TAKYON_RECORD_ERROR(error_message, "Failed to find the function 'tknDestroy()' in interconnect module '%s'.\nError: %s\n", interconnect_module, dlerror());
     return false;
   }
 #endif

@@ -79,12 +79,12 @@ void helloTask(TakyonGraph *graph, int group_id) {
         }
         // Send the message
         if (graph->process_count > 1) printf("Endpoint 'A' sending message: \"%s\"\n", expected_message);
-        takyonSend(path, buffer_index, msg_bytes, 0, 0, NULL);
+        takyonSend(path, buffer_index, TAKYON_SEND_FLAGS_NONE, msg_bytes, 0, 0, NULL);
 
       } else {
         // Wait for the message to arrive
         uint64_t recved_bytes;
-        takyonRecv(path, buffer_index, &recved_bytes, NULL, NULL);
+        takyonRecv(path, buffer_index, TAKYON_RECV_FLAGS_NONE, &recved_bytes, NULL, NULL);
         // Verify the correct number of bytes was received
         if (recved_bytes != msg_bytes) { fprintf(stderr, "Failed to get expected message bytes: got %ju but expected %ju\n", recved_bytes, msg_bytes); exit(EXIT_FAILURE); }
         // Move the message to a local CPU buffer
@@ -104,10 +104,10 @@ void helloTask(TakyonGraph *graph, int group_id) {
 
     // Send sync message from B to A to avoid issues with sending subsequent messages from A to B
     if (is_endpointA) {
-      takyonRecv(path, 0, NULL, NULL, NULL);
+      takyonRecv(path, 0, TAKYON_RECV_FLAGS_NONE, NULL, NULL, NULL);
       if (graph->process_count > 1) printf("\n");
     } else {
-      takyonSend(path, 0, 0, 0, 0, NULL);
+      takyonSend(path, 0, TAKYON_SEND_FLAGS_NONE, 0, 0, 0, NULL);
       printf("\n");
     }
   }

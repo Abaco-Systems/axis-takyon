@@ -515,6 +515,15 @@ static bool socketSetNoDelay(int socket_fd, bool use_it, char *error_message) {
   return true;
 }
 
+bool socketSetKernelRecvBufferingSize(int socket_fd, int bytes, char *error_message) {
+  // Allow datagrams to be buffered in the OS to avoid dropping packets
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, &bytes, sizeof(bytes)) != 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to set socket to SO_RCVBUF. errno=%d\n", errno);
+    return false;
+  }
+  return true;
+}
+
 bool socketCreateTcpClient(const char *ip_addr, uint16_t port_number, int *socket_fd_ret, int64_t timeout_ns, char *error_message) {
   int64_t start_time = clockTimeNanoseconds();
 

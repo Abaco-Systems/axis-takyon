@@ -465,6 +465,15 @@ static bool socketSetNoDelay(TakyonSocket socket_fd, bool use_it, char *error_me
   return true;
 }
 
+bool socketSetKernelRecvBufferingSize(TakyonSocket socket_fd, int bytes, char *error_message) {
+  // Allow datagrams to be buffered in the OS to avoid dropping packets
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (char *)&bytes, sizeof(bytes)) != 0) {
+    TAKYON_RECORD_ERROR(error_message, "Failed to set socket to SO_RCVBUF. sock_error=%d\n", WSAGetLastError());
+    return false;
+  }
+  return true;
+}
+
 bool socketCreateLocalClient(const char *socket_name, TakyonSocket *socket_fd_ret, int64_t timeout_ns, char *error_message) {
   if (!windows_socket_manager_init(error_message)) {
     return false;

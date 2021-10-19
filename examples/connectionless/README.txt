@@ -23,8 +23,7 @@ Build:
   Mac and Linux:
     Terminal:
       > export TAKYON_LIBS=<folder>  // e.g. $HOME/Takyon/API/builds/linux
-      > make
-      > make USE_STATIC_LIB=Yes      // Use static Takyon lib to avoid dynamic Takyon libs
+      > make [USE_STATIC_LIB=Yes] [WITH_RDMA=Yes] [WITH_CUDA=Yes]
   Windows:
     DOS Shell:
       > set TAKYON_LIBS=<folder>     // e.g. c:\takyon\API\build\windows
@@ -37,12 +36,18 @@ Run:
       > ./connectionless
 
     Unicast experiments:
-      Terminal 1: > ./connectionless "UnicastSendSocket -IP=<remote_ip_addr> -port=12345" -endpointA
-      Terminal 2: > ./connectionless "UnicastRecvSocket -IP=<local_ip_addr> -port=12345 -reuse"
+      Terminal 1: > ./connectionless "UnicastSendSocket -IP=<remote_ip_addr> -port=12345" -endpointA -poll -bytes 64000 -cyclesPerPrint 100000
+      Terminal 2: > ./connectionless "UnicastRecvSocket -IP=<local_ip_addr> -port=12345 -reuse -rcvbuf=1048576" -poll -bytes 64000 -cyclesPerPrint 100000
+
+      Terminal 1: > ./connectionless "UnicastSendRdma -remoteIP=<server_ip_addr> -port=12345" -endpointA -nbufs 5 -cyclesPerPrint 100000
+      Terminal 2: > ./connectionless "UnicastRecvRdma -localIP=<server_ip_addr> -port=12345" -nbufs 5 -cyclesPerPrint 100000
 
     Multicast experiments:
-      Terminal 1: > ./connectionless "MulticastSendSocket -IP=<local_ip_addr> -group=239.1.2.3 -port=12345" -endpointA
-      Terminal 2: > ./connectionless "MulticastRecvSocket -IP=<local_ip_addr> -group=239.1.2.3 -port=12345 -reuse"
+      Terminal 1: > ./connectionless "MulticastSendSocket -IP=<local_ip_addr> -group=239.1.2.3 -port=12345" -endpointA -poll
+      Terminal 2: > ./connectionless "MulticastRecvSocket -IP=<local_ip_addr> -group=239.1.2.3 -port=12345 -reuse -rcvbuf=1048576" -poll
+
+      Terminal 1: > ./connectionless "MulticastSendRdma -IP=<local_ip_addr> -group=239.1.2.3" -endpointA -nbufs 5 -cyclesPerPrint 100000
+      Terminal 2: > ./connectionless "MulticastRecvRdma -IP=<local_ip_addr> -group=239.1.2.3" -nbufs 5 -cyclesPerPrint 100000
 
   Windows:
     Follow the same as above, but replace "./connectionless" with "connectionless"

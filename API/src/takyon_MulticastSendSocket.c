@@ -35,7 +35,6 @@
 typedef struct {
   bool sender_addr_alloced;
   size_t sender_addr;
-  bool send_started;
 } SingleBuffer;
 
 typedef struct {
@@ -45,10 +44,16 @@ typedef struct {
   bool connection_failed;
 } PathBuffers;
 
-GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
+GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, TakyonSendFlagsMask flags, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
   PathBuffers *buffers = (PathBuffers *)private_path->private_data;
   SingleBuffer *buffer = &buffers->send_buffer_list[buffer_index];
+
+  // Error check flags
+  if (flags != TAKYON_SEND_FLAGS_NONE) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This interconnect only supports send flags == TAKYON_SEND_FLAGS_NONE\n");
+    return false;
+  }
 
   // Verify dest_offset is zero
   if (dest_offset != 0) {
@@ -70,12 +75,6 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
 
   // NOTE: the number of bytes sent does not need to be max bytes. The receiver will detect how many were sent in the datagram.
 
-  // Check if waiting on a takyonIsSendFinished()
-  if (buffer->send_started) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "A previous send on buffer %d was started, but takyonIsSendFinished() was not called\n", buffer_index);
-    return false;
-  }
-
   // Transfer the data, no header to send
   void *sender_addr = (void *)(buffer->sender_addr + src_offset);
   if (!socketDatagramSend(buffers->socket_fd, buffers->sock_in_addr, sender_addr, bytes, path->attrs.is_polling, private_path->send_start_timeout_ns, timed_out_ret, path->attrs.error_message)) {
@@ -90,41 +89,7 @@ GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t byte
 
   // NOTE: Sockets are self signaling, so no need for an extra signaling mechanism
 
-  // Handle completion
-  buffer->send_started = true;
-  if (path->attrs.send_completion_method == TAKYON_BLOCKING) {
-    buffer->send_started = false;
-  } else if (path->attrs.send_completion_method == TAKYON_USE_IS_SEND_FINISHED) {
-    // Nothing to do
-  }
-
   return true;
-}
-
-GLOBAL_VISIBILITY bool tknIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
-  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
-  PathBuffers *buffers = (PathBuffers *)private_path->private_data;
-  // Verify connection is still good
-  if (buffers->connection_failed) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "The connection is no longer valid\n");
-    return false;
-  }
-  // Check the transfer progress
-  SingleBuffer *buffer = &buffers->send_buffer_list[buffer_index];
-  if (!buffer->send_started) {
-    buffers->connection_failed = true;
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonIsSendFinished() was called, but a prior takyonSend() was not called on buffer %d\n", buffer_index);
-    return false;
-  }
-  // Since socket can't be non-blocking, the transfer is complete.
-  // Mark the transfer as complete.
-  buffer->send_started = false;
-  return true;
-}
-
-GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
-  TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonRecv() is not supported with MulticastSendSocket\n");
-  return false;
 }
 
 static void freePathMemoryResources(TakyonPath *path) {
@@ -324,8 +289,9 @@ GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
 void setMulticastSendSocketFunctionPointers(TakyonPrivatePath *private_path) {
   private_path->tknCreate = tknCreate;
   private_path->tknSend = tknSend;
-  private_path->tknIsSendFinished = tknIsSendFinished;
-  private_path->tknRecv = tknRecv;
+  private_path->tknIsSent = NULL;
+  private_path->tknPostRecv = NULL;
+  private_path->tknRecv = NULL;
   private_path->tknDestroy = tknDestroy;
 }
 #endif

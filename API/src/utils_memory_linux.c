@@ -46,6 +46,8 @@ bool memoryAlloc(size_t alignment, size_t size, void **addr_ret, char *error_mes
     TAKYON_RECORD_ERROR(error_message, "posix_memalign() failed to allocate memory\n");
     return false;
   }
+  // To avoid valgrind complaining about uninitialize memory, best to zero it
+  memset(*addr_ret, 0, size);
 #endif
 
   return true;

@@ -66,14 +66,6 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
     fprintf(stderr, "ERROR in %s(): attributes is NULL\n", __FUNCTION__);
     abort();
   }
-  if (attributes->send_completion_method != TAKYON_BLOCKING && attributes->send_completion_method != TAKYON_USE_IS_SEND_FINISHED) {
-    fprintf(stderr, "ERROR in %s(): attributes->send_completion_method must be one of TAKYON_BLOCKING or TAKYON_USE_IS_SEND_FINISHED\n", __FUNCTION__);
-    abort();
-  }
-  if (attributes->recv_completion_method != TAKYON_BLOCKING) {
-    fprintf(stderr, "ERROR in %s(): attributes->recv_completion_method must be TAKYON_BLOCKING\n", __FUNCTION__);
-    abort();
-  }
   // IMPORTANT: The following will also need to be validate with each interconnect since some will have different requirements
   if (attributes->nbufs_AtoB < 0) {
     fprintf(stderr, "ERROR in %s(): attributes->nbufs_AtoB can not be negative\n", __FUNCTION__);
@@ -181,7 +173,7 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
 
   // Get the function pointers from the loaded shared object library
   if (!sharedLibraryGetInterconnectFunctionPointers(interconnect_module, private_path, attributes->error_message)) {
-    TAKYON_RECORD_ERROR(attributes->error_message, "Failed to determine the functionality for the '%s' interconnect. If using Takyon's shared libraries, make sure the environment variable TAKYON_PATH is pointing to the correct folder. If using Takyon's static library, make sure the Makefile is pointing to the correct file. Otherwise the interconnect may not be available on this platfrom.\n", interconnect_module);
+    TAKYON_RECORD_ERROR(attributes->error_message, "Failed to determine the functionality for the '%s' interconnect. If using Takyon's shared libraries, make sure the environment variable TAKYON_PATH is pointing to the correct folder. If using Takyon's static library, make sure the executable is linked with the correct static library. Otherwise the interconnect may not be available on this platform.\n", interconnect_module);
     checkFailureReportingMethod(attributes, __FUNCTION__);
     free(private_path);
     free(path);
@@ -190,6 +182,12 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
 
   // Copy over all of the attributes
   path->attrs = *attributes;
+
+  // Mark the functions that are supported for this interconnect
+  path->attrs.Send_supported = (private_path->tknSend != NULL);
+  path->attrs.IsSent_supported = (private_path->tknIsSent != NULL);
+  path->attrs.PostRecv_supported = (private_path->tknPostRecv != NULL);
+  path->attrs.Recv_supported = (private_path->tknRecv != NULL);
 
   // Clear the fields that should not be copied from the original attributes
   path->attrs.sender_max_bytes_list = NULL;
@@ -259,7 +257,7 @@ TakyonPath *takyonCreate(TakyonPathAttributes *attributes) {
   return path;
 }
 
-bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
+bool takyonSend(TakyonPath *path, int buffer_index, TakyonSendFlagsMask flags, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
@@ -278,6 +276,11 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
   }
 
   // Error checking
+  if (private_path->tknSend == NULL) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This Takyon interconnect does not support takyonSend(). Use a different Takyon interconnect.\n");
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
   int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
   if (nbufs_sender <= 0) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonSend() on this path since there are no send buffers defined.\n");
@@ -305,7 +308,7 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Initiate the send
-  bool ok = private_path->tknSend(path, buffer_index, bytes, src_offset, dest_offset, timed_out_ret);
+  bool ok = private_path->tknSend(path, buffer_index, flags, bytes, src_offset, dest_offset, timed_out_ret);
   if (!ok) {
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
@@ -320,7 +323,7 @@ bool takyonSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src
   return ok;
 }
 
-bool takyonIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
+bool takyonIsSent(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
@@ -335,19 +338,19 @@ bool takyonIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_re
   }
 
   // Error checking
+  if (private_path->tknIsSent == NULL) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This Takyon interconnect does not support takyonIsSent(). Use a different Takyon interconnect or avoid the flag TAKYON_SEND_FLAGS_NON_BLOCKING when sending.\n");
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
   int nbufs_sender = path->attrs.is_endpointA ? path->attrs.nbufs_AtoB : path->attrs.nbufs_BtoA;
   if (nbufs_sender <= 0) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonIsSendFinished() on this path since there are no send buffers defined.\n");
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonIsSent() on this path since there are no send buffers defined.\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
   if (buffer_index >= nbufs_sender) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index=%d must be less than the number of send buffers=%d\n", buffer_index, nbufs_sender);
-    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
-    return false;
-  }
-  if (path->attrs.send_completion_method != TAKYON_USE_IS_SEND_FINISHED) {
-    TAKYON_RECORD_ERROR(path->attrs.error_message, "takyonIsSendFinished() cannot be used since the path's send_completion_method was not set to TAKYON_USE_IS_SEND_FINISHED\n");
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
   }
@@ -361,7 +364,7 @@ bool takyonIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_re
   if (timed_out_ret != NULL) *timed_out_ret = false;
 
   // Check for send completion
-  bool ok = private_path->tknIsSendFinished(path, buffer_index, timed_out_ret);
+  bool ok = private_path->tknIsSent(path, buffer_index, timed_out_ret);
   if (!ok) {
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;
@@ -376,7 +379,7 @@ bool takyonIsSendFinished(TakyonPath *path, int buffer_index, bool *timed_out_re
   return ok;
 }
 
-bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
+bool takyonRecv(TakyonPath *path, int buffer_index, TakyonRecvFlagsMask flags, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
 
   clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
@@ -391,6 +394,11 @@ bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_
   }
 
   // Error checking
+  if (private_path->tknRecv == NULL) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This Takyon interconnect does not support takyonRecv(). Use a different Takyon interconnect.\n");
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
   int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
   if (nbufs_recver <= 0) {
     TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonRecv() on this path since there are no recv buffers defined.\n");
@@ -414,7 +422,74 @@ bool takyonRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_
   if (bytes_ret != NULL) *bytes_ret = 0;
   if (offset_ret != NULL) *offset_ret = 0;
 
-  bool ok = private_path->tknRecv(path, buffer_index, bytes_ret, offset_ret, timed_out_ret);
+  uint64_t bytes = 0;
+  uint64_t offset = 0;
+  // Some interconnects (e.g. OneSidedSocket) need to kown how many bytes to expect and the expected offest
+  if (bytes_ret != NULL) bytes = *bytes_ret;
+  if (offset_ret != NULL) offset = *offset_ret;
+  bool ok = private_path->tknRecv(path, buffer_index, flags, &bytes, &offset, timed_out_ret);
+  if (!ok) {
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+
+  // Check for hidden errors
+  if (strlen(path->attrs.error_message) > 0) {
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+
+  // Verbosity
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV) {
+    printf("%-15s (%s:%s) buf=%d. Got data: %ju bytes at offset %ju\n",
+           __FUNCTION__,
+           path->attrs.is_endpointA ? "A" : "B",
+           path->attrs.interconnect,
+           buffer_index,
+           bytes,
+           offset);
+  }
+
+  if (bytes_ret != NULL) *bytes_ret = bytes;
+  if (offset_ret != NULL) *offset_ret = offset;
+
+  return ok;
+}
+
+bool takyonPostRecv(TakyonPath *path, int buffer_index) {
+  TakyonPrivatePath *private_path = (TakyonPrivatePath *)path->private_path;
+
+  clearErrorMessage(path->attrs.is_endpointA, path->attrs.error_message);
+
+  // Verbosity
+  if (path->attrs.verbosity & TAKYON_VERBOSITY_SEND_RECV) {
+    printf("%-15s (%s:%s) buf=%d. Post a new receive\n",
+           __FUNCTION__,
+           path->attrs.is_endpointA ? "A" : "B",
+           path->attrs.interconnect,
+           buffer_index);
+  }
+
+  // Error checking
+  if (private_path->tknPostRecv == NULL) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "This Takyon interconnect does not support takyonPostRecv(). Use a different Takyon interconnect or avoid the flag TAKYON_RECV_FLAGS_MANUAL_REPOST when receiving\n");
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+  int nbufs_recver = path->attrs.is_endpointA ? path->attrs.nbufs_BtoA : path->attrs.nbufs_AtoB;
+  if (nbufs_recver <= 0) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "Can't call takyonPostRecv() on this path since there are no recv buffers defined.\n");
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+  if (buffer_index >= nbufs_recver) {
+    TAKYON_RECORD_ERROR(path->attrs.error_message, "The argument buffer_index=%d must be less than the number of recv buffers=%d\n", buffer_index, nbufs_recver);
+    checkFailureReportingMethod(&path->attrs, __FUNCTION__);
+    return false;
+  }
+
+  // Post the recv
+  bool ok = private_path->tknPostRecv(path, buffer_index);
   if (!ok) {
     checkFailureReportingMethod(&path->attrs, __FUNCTION__);
     return false;

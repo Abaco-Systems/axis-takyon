@@ -107,7 +107,7 @@ static void *sendThread(void *user_arg) {
     pthread_mutex_unlock(&my_path->mutex);
     // Do the send
     //printf("%s: Sending %ju bytes on buffer %d, cycle %d\n", my_path->takyon_path->attrs.is_endpointA ? "A" : "B", bytes_to_send, buffer_index, my_path->cycle);
-    takyonSend(my_path->takyon_path, buffer_index, bytes_to_send, 0, 0, NULL);
+    takyonSend(my_path->takyon_path, buffer_index, TAKYON_SEND_FLAGS_NONE, bytes_to_send, 0, 0, NULL);
     // Done sending, now invoke the callback
     sendDoneCallback(my_path, buffer_index);
   }
@@ -138,7 +138,7 @@ static void *recvThread(void *user_arg) {
     // Do the recv
     uint64_t bytes_received;
     //printf("%s: Recving on buffer %d, cycle %d\n", my_path->takyon_path->attrs.is_endpointA ? "A" : "B", buffer_index, my_path->cycle);
-    takyonRecv(my_path->takyon_path, buffer_index, &bytes_received, NULL, NULL);
+    takyonRecv(my_path->takyon_path, buffer_index, TAKYON_RECV_FLAGS_NONE, &bytes_received, NULL, NULL);
     //printf("%s: Recved %ju bytes on buffer %d, cycle %d\n", my_path->takyon_path->attrs.is_endpointA ? "A" : "B", bytes_received, buffer_index, my_path->cycle);
     // Done recving, now invoke the callback
     recvDoneCallback(my_path, buffer_index, bytes_received);

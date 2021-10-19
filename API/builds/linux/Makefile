@@ -26,7 +26,8 @@ TAKYON_C_FILES += utils_socket_linux.c
 TAKYON_C_FILES += utils_threads.c
 TAKYON_C_FILES += utils_time_linux.c
 ifeq ($(WITH_RDMA),Yes)
-    TAKYON_C_FILES += utils_rdma_verbs.c
+    TAKYON_C_FILES += utils_rdma_connected_verbs.c
+    TAKYON_C_FILES += utils_rdma_unconnected_verbs.c
 endif
 ifeq ($(WITH_CUDA),Yes)
     TAKYON_C_FILES += utils_memory_cuda.c

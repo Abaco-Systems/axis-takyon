@@ -50,5 +50,8 @@ Run:
       Terminal 2: > export TAKYON_MULTICAST_IP=<local_ip_addr>
                   > ./hello "Socket -server -IP=<local_ip_addr> -ID=1"
 
+      Terminal 1: > ./hello "Rdma -server -IP=<local_ip_addr> -port=12345" -endpointA
+      Terminal 2: > ./hello "Rdma -client -IP=<server_ip_addr> -port=12345"
+
   Windows:
     Follow the same as above, but replace "./hello" with "hello"
