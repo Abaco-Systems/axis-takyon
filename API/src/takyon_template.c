@@ -16,31 +16,37 @@
 
 #include "takyon_private.h"
 
+// Optional; needed for two-way or unicast/multicast send
 GLOBAL_VISIBILITY bool tknSend(TakyonPath *path, int buffer_index, uint64_t bytes, uint64_t src_offset, uint64_t dest_offset, bool *timed_out_ret) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknSend() is not yet implemented.\n");
   return false;
 }
 
+// IMPORTANT: Only implement this if the interconnect truely supports non blocking sends. Don't want to mislead the application developer.
 GLOBAL_VISIBILITY bool tknIsSent(TakyonPath *path, int buffer_index, bool *timed_out_ret) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknIsSent() is not yet implemented.\n");
   return false;
 }
 
+// Optional; needed for two-way or unicast/multicast recv
 GLOBAL_VISIBILITY bool tknRecv(TakyonPath *path, int buffer_index, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknRecv() is not yet implemented.\n");
   return false;
 }
 
+// IMPORTANT: Only implement this if the interconnect truely supports pre-posting a recv buffer (e.g. RDMA). Don't want to mislead the application developer.
 GLOBAL_VISIBILITY bool tknPostRecv(TakyonPath *path, int buffer_index) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknPostRecv() is not yet implemented.\n");
   return false;
 }
 
+// Required
 GLOBAL_VISIBILITY bool tknDestroy(TakyonPath *path) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknDestroy() is not yet implemented.\n");
   return false;
 }
 
+// Required
 GLOBAL_VISIBILITY bool tknCreate(TakyonPath *path) {
   TAKYON_RECORD_ERROR(path->attrs.error_message, "tknCreate() is not yet implemented.\n");
   return false;

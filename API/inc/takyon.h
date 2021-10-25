@@ -114,6 +114,7 @@ extern bool takyonIsSent(TakyonPath *path, int buffer_index, bool *timed_out_ret
 // Wait for a message to arrive
 extern bool takyonRecv(TakyonPath *path, int buffer_index, TakyonRecvFlagsMask flags, uint64_t *bytes_ret, uint64_t *offset_ret, bool *timed_out_ret);
 // Allow a recv buffer to be used again. All recv buffers are pre posted by takyonCreate()
+//*+ FUTURE: Once init attrs recver_flags are implemented, then the app developer can decide if the recv buffers are pre-posted at time of takyonCreate()
 extern bool takyonPostRecv(TakyonPath *path, int buffer_index);
 
 // Destroy a communication endpoint.
